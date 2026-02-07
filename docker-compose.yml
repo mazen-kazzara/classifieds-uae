@@ -1,0 +1,34 @@
+services:
+  web:
+    build:
+      context: ./classified-uae
+      dockerfile: Dockerfile
+    container_name: classifieds-web
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://classifieds_user:strongpassword123@postgres:5432/classifieds
+    depends_on:
+      postgres:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:16
+    container_name: classifieds-postgres
+    environment:
+      POSTGRES_DB: classifieds
+      POSTGRES_USER: classifieds_user
+      POSTGRES_PASSWORD: strongpassword123
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U classifieds_user -d classifieds"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:
