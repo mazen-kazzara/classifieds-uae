@@ -27,10 +27,16 @@ export default function AdListItem({
           type="button"
           title="This ad contains images"
           className="text-gray-500"
-          onClick={onImageClick}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log("IMAGE ICON CLICKED");
+            onImageClick();
+          }}
         >
           📷
         </button>
+
       )}
     </li>
   );

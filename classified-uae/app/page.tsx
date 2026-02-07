@@ -1,4 +1,6 @@
 import { mockAds, isExpired } from "./data/mockAds";
+import AdListItem from "./components/AdListItem";
+
 export default function Home() {
   return (
     <div className="min-h-screen bg-gray-100 text-black">
@@ -27,23 +29,13 @@ export default function Home() {
           {mockAds
             .filter((ad) => ad.category === category && !isExpired(ad.expiresAt))
             .map((ad) => (
-              <li key={ad.id} className="flex items-center gap-2">
-  <a
-    href={`/ad/${ad.id}`}
-    className="text-blue-600 hover:underline"
-  >
-    {ad.title}
-  </a>
+              <AdListItem
+               key={ad.id}
+               id={ad.id}
+               title={ad.title}
+               hasImages={ad.hasImages}
+        />
 
-  {ad.hasImages && (
-    <span
-      title="This ad contains images"
-      className="text-gray-500"
-    >
-      📷
-    </span>
-  )}
-</li>
 
             ))}
         </ul>

@@ -1,31 +1,36 @@
 export interface Ad {
   id: string;
   title: string;
-  text: string;
   category: string;
+  text: string;
   createdAt: string;
   expiresAt: string;
   hasImages: boolean;
+  images?: string[];
 }
+
 
 export const mockAds: Ad[] = [
   {
-    id: "AD-20260125-120000-0001",
-    title: "Toyota Corolla 2018",
-    text: "Clean car, good condition, single owner.",
-    category: "cars",
-    createdAt: "2026-01-25",
-    expiresAt: "2026-02-01",
-
-    hasImages: true,
-  },
+  id: "AD-20260125-120000-0001",
+  title: "Toyota Corolla 2018",
+  category: "cars",
+  text: "...",
+  hasImages: true,
+  images: [
+    "/mock/car-1.jpg",
+    "/mock/car-2.jpg"
+  ],
+  createdAt: "2026-01-25",
+  expiresAt: "2026-12-31",
+},
   {
     id: "AD-20260125-120500-0002",
     title: "Apartment for rent in Dubai",
     text: "2 bedroom apartment, close to metro.",
     category: "real-estate",
     createdAt: "2026-01-25",
-    expiresAt: "2026-02-01",
+    expiresAt: "2026-09-01",
 
     hasImages: false,
   },
@@ -35,7 +40,7 @@ export const mockAds: Ad[] = [
     text: "Full time job, commission based.",
     category: "jobs",
     createdAt: "2026-01-25",
-    expiresAt: "2026-02-01",
+    expiresAt: "2026-09-01",
 
     hasImages: false,
   },
