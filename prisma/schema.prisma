@@ -1,0 +1,124 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Ad {
+  id       String @id
+  language String
+  category String
+  title    String
+  body     String
+
+  price     Int
+  charCount Int
+
+  contactPhone String?
+  contactEmail String?
+
+  hasImages Boolean @default(false)
+
+  status AdStatus @default(PUBLISHED)
+
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  media     Media[]
+  payments  Payment[]
+  createdBy User?     @relation(fields: [createdById], references: [id])
+
+  createdById String?
+
+  @@index([category])
+  @@index([status])
+  @@index([expiresAt])
+}
+
+model Media {
+  id       String @id @default(cuid())
+  adId     String
+  url      String
+  position Int
+
+  createdAt DateTime @default(now())
+
+  ad Ad @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@unique([adId, position])
+  @@index([adId])
+}
+
+model Payment {
+  id String @id @default(cuid())
+
+  adId     String
+  provider String // Ziina
+  amount   Int
+  currency String // AED
+  status   PaymentStatus
+
+  providerRef String // Ziina payment ID
+  rawPayload  Json
+
+  createdAt DateTime @default(now())
+
+  ad Ad @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@index([adId])
+  @@index([providerRef])
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id       String   @id @default(cuid())
+  email    String   @unique
+  password String
+  role     UserRole
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  audits AuditLog[]
+  ads    Ad[]
+}
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  userId   String
+  action   String
+  entity   String
+  entityId String?
+  payload  Json?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([entity])
+}
+
+enum AdStatus {
+  PUBLISHED
+  EXPIRED
+  CANCELLED
+}
+
+enum AdCreator {
+  SYSTEM
+  ADMIN
+}
