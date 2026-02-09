@@ -8,6 +8,7 @@ datasource db {
 }
 
 
+
 model Ad {
   id       String @id
   language String
