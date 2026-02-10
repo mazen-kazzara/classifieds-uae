@@ -7,6 +7,9 @@ RUN npm install
 
 COPY . .
 
+# 👇 THIS IS THE FIX
+RUN npx prisma generate
+
 RUN npm run build
 
 EXPOSE 3000

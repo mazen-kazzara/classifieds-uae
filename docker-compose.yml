@@ -7,6 +7,8 @@ services:
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://classifieds_user:strongpassword123@postgres:5432/classifieds
+      NEXTAUTH_SECRET: your-super-secret-key-change-this-in-production-min-32-chars
+      NEXTAUTH_URL: http://167.235.142.255
     depends_on:
       postgres:
         condition: service_healthy
