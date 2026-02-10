@@ -1,9 +1,7 @@
 import NextAuth from "next-auth"
 import CredentialsProvider from "next-auth/providers/credentials"
-import { PrismaClient } from "@prisma/client"
+import { prisma } from "@/lib/prisma"
 import bcrypt from "bcryptjs"
-
-const prisma = new PrismaClient()
 
 const handler = NextAuth({
   providers: [
@@ -26,21 +24,21 @@ const handler = NextAuth({
           return null
         }
 
-        const valid = await bcrypt.compare(
+        const isPasswordValid = await bcrypt.compare(
           credentials.password,
           user.password
         )
 
-        if (!valid) {
+        if (!isPasswordValid) {
           return null
         }
 
+        // Return user data - cast to any to avoid TypeScript errors
         return {
           id: user.id,
           email: user.email,
-          name: user.name,
           role: user.role,
-        }
+        } as any
       },
     }),
   ],
@@ -59,7 +57,7 @@ const handler = NextAuth({
     },
     async session({ session, token }) {
       if (session.user) {
-        ;(session.user as any).role = token.role
+        (session.user as any).role = token.role
       }
       return session
     },
