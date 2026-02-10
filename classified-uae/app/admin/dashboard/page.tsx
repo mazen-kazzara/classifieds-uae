@@ -1,4 +1,8 @@
 import { prisma } from "@/lib/prisma"
+import { PrismaClient } from "@prisma/client"
+import Link from "next/link"
+const prisma = new PrismaClient()
+export const dynamic = 'force-dynamic'
 
 
 export default async function AdminDashboard() {
