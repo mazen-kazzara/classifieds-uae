@@ -12,6 +12,7 @@ async function main() {
     create: {
       email: "admin@classifieduae.com",
       name: "Admin",
+      phone: '+971501234567',
       password,
       role: "ADMIN",
     },

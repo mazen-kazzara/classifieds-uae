@@ -10,34 +10,26 @@ datasource db {
 
 
 model Ad {
-  id       String @id
-  language String
-  category String
-  title    String
-  body     String
-
-  price     Int
-  charCount Int
-
-  contactPhone String?
-  contactEmail String?
-
-  hasImages Boolean @default(false)
-
-  status AdStatus @default(PUBLISHED)
-
-  createdAt DateTime @default(now())
-  expiresAt DateTime
-
-  media     Media[]
-  payments  Payment[]
-  createdBy User?     @relation(fields: [createdById], references: [id])
-
-  createdById String?
-
-  @@index([category])
+  id          String    @id @default(cuid())
+  title       String
+  description String
+  price       Float
+  category    String
+  status      AdStatus  @default(PENDING)  // Change this line
+  
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  
+  media       Media[]
+  payment     Payment?
+  
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  expiresAt   DateTime?
+  publishedAt DateTime?
+  
   @@index([status])
-  @@index([expiresAt])
+  @@index([category])
 }
 
 model Media {
@@ -57,7 +49,7 @@ model Media {
 model Payment {
   id String @id @default(cuid())
 
-  adId     String
+  adId     String @unique
   provider String // Ziina
   amount   Int
   currency String // AED
@@ -83,8 +75,10 @@ enum PaymentStatus {
 model User {
   id       String   @id @default(cuid())
   email    String   @unique
-  password String
-  role     UserRole
+  phone    String?  @unique
+  name     String?  
+  password String?
+  role     UserRole  @default(ADMIN)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -116,9 +110,12 @@ model AuditLog {
 }
 
 enum AdStatus {
+  DRAFT
+  PENDING
+  APPROVED
+  REJECTED
   PUBLISHED
   EXPIRED
-  CANCELLED
 }
 
 enum AdCreator {
