@@ -1,0 +1,145 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+
+}
+
+model AdSubmission {
+  id               String   @id @default(cuid())
+  phone            String
+  language         String?
+  category         String?
+  text             String?
+  contactPhone     String?
+  contactEmail     String?
+  imagesCount      Int      @default(0)
+
+  priceText        Int?
+  priceImages      Int?
+  priceTotal       Int?
+
+  status           SubmissionStatus @default(DRAFT)
+
+  payment          Payment?
+  ad               Ad?
+
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@index([phone])
+  @@index([status])
+}
+
+model Ad {
+  id             String   @id @default(cuid())
+  submissionId   String   @unique
+  submission     AdSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  title          String?
+  description    String
+  category       String
+  status         AdStatus @default(PENDING)
+
+  expiresAt      DateTime
+  publishedAt    DateTime?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  media          Media[]
+}
+
+model Media {
+  id       String @id @default(cuid())
+  adId     String
+  url      String
+  position Int
+
+  createdAt DateTime @default(now())
+
+  ad Ad @relation(fields: [adId], references: [id], onDelete: Cascade)
+
+  @@unique([adId, position])
+}
+
+model Payment {
+  id String @id @default(cuid())
+
+  submissionId String @unique
+  submission   AdSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  provider     String
+  amount       Int
+  currency     String
+  status       PaymentStatus
+
+  providerRef  String @unique
+  rawPayload   Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([providerRef])
+}
+
+model User {
+  id       String   @id @default(cuid())
+  email    String   @unique
+  phone    String?  @unique
+  name     String?
+  password String?
+  role     UserRole @default(ADMIN)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  audits AuditLog[]
+}
+
+model AuditLog {
+  id String @id @default(cuid())
+
+  userId   String
+  action   String
+  entity   String
+  entityId String?
+  payload  Json?
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+enum SubmissionStatus {
+  DRAFT
+  WAITING_PAYMENT
+  PAID
+  PUBLISHED
+  PUBLISHED_PARTIAL
+  REJECTED
+  EXPIRED
+}
+
+enum AdStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  PUBLISHED
+  EXPIRED
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+}
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+}

@@ -1,14 +1,16 @@
+#version: "3.9"
+
 services:
   web:
-    build:
-      context: ./classified-uae
-      dockerfile: Dockerfile
     container_name: classifieds-web
+    build:
+      context: .
+      dockerfile: Dockerfile
     environment:
       NODE_ENV: production
       DATABASE_URL: postgresql://classifieds_user:strongpassword123@postgres:5432/classifieds
       NEXTAUTH_SECRET: your-super-secret-key-change-this-in-production-min-32-chars
-      NEXTAUTH_URL: http://167.235.142.255
+      NEXTAUTH_URL: http://167.235.142.255:3000
     depends_on:
       postgres:
         condition: service_healthy
