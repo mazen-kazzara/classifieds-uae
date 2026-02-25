@@ -1,18 +1,31 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import type { NextRequest } from "next/server";
+import { getToken } from "next-auth/jwt";
 
 const prisma = new PrismaClient();
 
 export async function GET(req: NextRequest) {
   try {
-    const ADMIN_KEY = process.env.ADMIN_API_KEY;
+    // 🔐 Read JWT from session
+    const token = await getToken({
+      req,
+      secret: process.env.NEXTAUTH_SECRET,
+    });
 
-    // Admin authentication
-    if (!ADMIN_KEY || req.headers.get("x-admin-key") !== ADMIN_KEY) {
+    // ❌ Not logged in
+    if (!token) {
       return NextResponse.json(
         { ok: false, error: "UNAUTHORIZED" },
         { status: 401 }
+      );
+    }
+
+    // ❌ Not admin or supervisor
+    if (token.role !== "ADMIN" && token.role !== "SUPERVISOR") {
+      return NextResponse.json(
+        { ok: false, error: "FORBIDDEN" },
+        { status: 403 }
       );
     }
 

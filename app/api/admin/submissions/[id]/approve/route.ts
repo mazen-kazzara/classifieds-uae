@@ -1,51 +1,64 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import type { NextRequest } from "next/server";
+import { NextResponse } from "next/server"
+import { PrismaClient } from "@prisma/client"
+import type { NextRequest } from "next/server"
+import { getToken } from "next-auth/jwt"
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient()
 
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
-    const { id } = await params;
+    const { id } = await params
 
-    const adminKey = req.headers.get("x-admin-key");
-    if (!adminKey || adminKey !== process.env.ADMIN_API_KEY) {
+    // 🔐 Verify session
+    const token = await getToken({
+      req,
+      secret: process.env.NEXTAUTH_SECRET,
+    })
+
+    if (!token) {
       return NextResponse.json(
         { ok: false, error: "UNAUTHORIZED" },
         { status: 401 }
-      );
+      )
+    }
+
+    if (token.role !== "ADMIN" && token.role !== "SUPERVISOR") {
+      return NextResponse.json(
+        { ok: false, error: "FORBIDDEN" },
+        { status: 403 }
+      )
     }
 
     const submission = await prisma.adSubmission.findUnique({
       where: { id },
-      include: { payment: true, ad: true },
-    });
+      include: { ad: true },
+    })
 
     if (!submission) {
       return NextResponse.json(
         { ok: false, error: "NOT_FOUND" },
         { status: 404 }
-      );
+      )
     }
 
-    // Only allow approval if paid or expired (republish case)
     if (submission.status !== "PAID" && submission.status !== "EXPIRED") {
       return NextResponse.json(
         { ok: false, error: "INVALID_STATUS" },
         { status: 400 }
-      );
+      )
     }
 
-    const now = new Date();
-    const expiresAt = new Date(now.getTime() + 30 * 24 * 60 * 60 * 1000);
+    const now = new Date()
+    const expiresAt = new Date(
+      now.getTime() + 30 * 24 * 60 * 60 * 1000
+    )
 
-    let ad;
+    let ad
 
     if (submission.ad) {
-      // Republish existing ad
       ad = await prisma.ad.update({
         where: { id: submission.ad.id },
         data: {
@@ -53,9 +66,8 @@ export async function POST(
           publishedAt: now,
           expiresAt,
         },
-      });
+      })
     } else {
-      // Create new ad
       ad = await prisma.ad.create({
         data: {
           submissionId: submission.id,
@@ -65,7 +77,7 @@ export async function POST(
           publishedAt: now,
           expiresAt,
         },
-      });
+      })
     }
 
     await prisma.adSubmission.update({
@@ -73,7 +85,7 @@ export async function POST(
       data: {
         status: "PUBLISHED",
       },
-    });
+    })
 
     return NextResponse.json({
       ok: true,
@@ -81,11 +93,15 @@ export async function POST(
       adId: ad.id,
       status: "PUBLISHED",
       expiresAt,
-    });
+    })
   } catch (err: any) {
     return NextResponse.json(
-      { ok: false, error: "SERVER_ERROR", message: err?.message ?? "" },
+      {
+        ok: false,
+        error: "SERVER_ERROR",
+        message: err?.message ?? "",
+      },
       { status: 500 }
-    );
+    )
   }
 }
