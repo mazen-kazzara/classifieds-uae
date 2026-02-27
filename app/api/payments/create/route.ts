@@ -9,10 +9,7 @@ const prisma = new PrismaClient();
 const RATE_LIMIT = 5;
 const WINDOW_MS = 60 * 1000;
 
-const ipStore = new Map<
-  string,
-  { count: number; windowStart: number }
->();
+const ipStore = new Map<string, { count: number; windowStart: number }>();
 
 function checkRateLimit(ip: string) {
   const now = Date.now();
@@ -29,19 +26,17 @@ function checkRateLimit(ip: string) {
     return true;
   }
 
-  if (record.count >= RATE_LIMIT) {
-    return false;
-  }
+  if (record.count >= RATE_LIMIT) return false;
 
   record.count++;
   return true;
 }
 
-/* ================= HANDLER ================= */
-
 function generateFakePaymentRef() {
   return "PAY_" + Math.random().toString(36).substring(2, 10).toUpperCase();
 }
+
+/* ================= HANDLER ================= */
 
 export async function POST(req: NextRequest) {
   try {
@@ -66,57 +61,96 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const submission = await prisma.adSubmission.findUnique({
-      where: { id: submissionId },
-    });
+    const result = await prisma.$transaction(async (tx) => {
+      const submission = await tx.adSubmission.findUnique({
+        where: { id: submissionId },
+        include: { payment: true },
+      });
 
-    if (!submission) {
-      return NextResponse.json(
-        { ok: false, error: "NOT_FOUND" },
-        { status: 404 }
-      );
-    }
+      if (!submission) throw new Error("NOT_FOUND");
 
-    if (submission.status !== "WAITING_PAYMENT") {
-      return NextResponse.json(
-        { ok: false, error: "INVALID_STATUS_FOR_PAYMENT" },
-        { status: 400 }
-      );
-    }
+      // Must be fully completed
+      if (
+        !submission.language ||
+        !submission.category ||
+        !submission.text ||
+        !submission.contactPhone ||
+        !submission.contactEmail
+      ) {
+        throw new Error("INCOMPLETE_SUBMISSION");
+      }
 
-    if (!submission.priceTotal || submission.priceTotal <= 0) {
-      return NextResponse.json(
-        { ok: false, error: "INVALID_AMOUNT" },
-        { status: 400 }
-      );
-    }
+      if (!submission.priceTotal || submission.priceTotal <= 0) {
+        throw new Error("INVALID_AMOUNT");
+      }
 
-    const paymentRef = generateFakePaymentRef();
+      // Existing payment logic
+      const existing = await tx.payment.findUnique({
+        where: { submissionId },
+      });
 
-    const payment = await prisma.payment.create({
-      data: {
-        submissionId: submission.id,
-        provider: "ZIINA_SIM",
-        amount: submission.priceTotal,
-        currency: "AED",
-        status: "PENDING",
-        providerRef: paymentRef,
-        rawPayload: {},
-      },
+      if (existing) {
+        if (existing.status === "SUCCESS") {
+          throw new Error("ALREADY_PAID");
+        }
+
+        if (existing.status === "PENDING") {
+          return { reused: true, payment: existing };
+        }
+
+        // If FAILED → allow new one (delete old)
+        if (existing.status === "FAILED") {
+          await tx.payment.delete({
+            where: { id: existing.id },
+          });
+        }
+      }
+
+      // Ensure submission is in correct state
+      await tx.adSubmission.update({
+        where: { id: submission.id },
+        data: { status: "WAITING_PAYMENT" },
+      });
+
+      const paymentRef = generateFakePaymentRef();
+
+      const payment = await tx.payment.create({
+        data: {
+          submissionId: submission.id,
+          provider: "ZIINA_SIM",
+          amount: submission.priceTotal,
+          currency: "AED",
+          status: "PENDING",
+          providerRef: paymentRef,
+          rawPayload: {},
+        },
+      });
+
+      return { reused: false, payment };
     });
 
     return NextResponse.json({
       ok: true,
-      paymentId: payment.id,
-      providerRef: payment.providerRef,
-      amount: payment.amount,
-      currency: payment.currency,
-      status: payment.status,
+      paymentId: result.payment.id,
+      providerRef: result.payment.providerRef,
+      amount: result.payment.amount,
+      currency: result.payment.currency,
+      status: result.payment.status,
+      reused: result.reused,
     });
   } catch (err: any) {
+    const map: Record<string, number> = {
+      NOT_FOUND: 404,
+      INCOMPLETE_SUBMISSION: 400,
+      INVALID_AMOUNT: 400,
+      ALREADY_PAID: 400,
+    };
+
+    const status = map[err.message] ?? 500;
+
     return NextResponse.json(
-      { ok: false, error: "SERVER_ERROR", message: err?.message ?? "" },
-      { status: 500 }
+      { ok: false, error: err.message || "SERVER_ERROR" },
+      { status }
     );
   }
 }

@@ -8,6 +8,11 @@ function normalizePhone(input: string) {
   return (input || "").replace(/\D/g, "");
 }
 
+function isValidUAEPhone(phone: string) {
+  // UAE format: 971XXXXXXXXX (12 digits total)
+  return /^971\d{9}$/.test(phone);
+}
+
 function isValidEmail(email: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
@@ -26,7 +31,7 @@ export async function POST(
     const contactPhone = normalizePhone(contactPhoneRaw);
     const contactEmail = contactEmailRaw.trim();
 
-    if (!contactPhone.startsWith("971")) {
+    if (!isValidUAEPhone(contactPhone)) {
       return NextResponse.json(
         { ok: false, error: "INVALID_CONTACT_PHONE" },
         { status: 400 }

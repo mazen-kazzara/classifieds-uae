@@ -1,19 +1,23 @@
-"use client"
+import "./globals.css";
+import Providers from "./providers";
 
-import { SessionProvider } from "next-auth/react"
+export const metadata = {
+  title: "Classified UAE",
+  description: "Fully automated classified ads",
+};
 
 export default function RootLayout({
   children,
 }: {
-  children: React.ReactNode
+  children: React.ReactNode;
 }) {
   return (
     <html lang="en">
       <body>
-        <SessionProvider>
+        <Providers>
           {children}
-        </SessionProvider>
+        </Providers>
       </body>
     </html>
-  )
+  );
 }

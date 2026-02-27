@@ -26,6 +26,7 @@ model AdSubmission {
 
   payment          Payment?
   ad               Ad?
+  submissionMedia SubmissionMedia[]
 
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
@@ -66,6 +67,22 @@ model Media {
   @@unique([adId, position])
 }
 
+model SubmissionMedia {
+  id           String   @id @default(cuid())
+  submissionId String
+  submission   AdSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  // local temp path or temp URL (NOT permanent)
+  tempKey      String
+  position     Int
+
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  @@unique([submissionId, position])
+  @@index([submissionId])
+  @@index([expiresAt])
+}
 model Payment {
   id String @id @default(cuid())
 
@@ -102,17 +119,26 @@ model User {
 model AuditLog {
   id String @id @default(cuid())
 
-  userId   String
-  action   String
-  entity   String
+  // who triggered
+  userId   String?
+  actor    String   // "ADMIN" | "BOT" | "WEBHOOK" | "SYSTEM"
+
+  action   String   // e.g. SUBMISSION_CREATED
+  entity   String   // e.g. SUBMISSION
   entityId String?
+
   payload  Json?
+
+  ipAddress String?
+  userAgent String?
 
   createdAt DateTime @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([entity, entityId])
+  @@index([action])
 }
 
 enum SubmissionStatus {

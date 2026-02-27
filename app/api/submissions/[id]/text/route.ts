@@ -63,6 +63,29 @@ export async function POST(
       );
     }
 
+    // 🔒 10-MINUTE DUPLICATE PREVENTION
+    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
+
+    const duplicate = await prisma.adSubmission.findFirst({
+      where: {
+        phone: submission.phone,
+        text,
+        createdAt: {
+          gte: tenMinutesAgo,
+        },
+        NOT: {
+          id,
+        },
+      },
+    });
+
+    if (duplicate) {
+      return NextResponse.json(
+        { ok: false, error: "DUPLICATE_SUBMISSION_10_MIN" },
+        { status: 409 }
+      );
+    }
+
     const priceText = calculatePrice(submission.language, text);
 
     const updated = await prisma.adSubmission.update({

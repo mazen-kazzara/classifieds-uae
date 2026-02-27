@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 
 const prisma = new PrismaClient();
 
-/* ================= RATE LIMIT ================= */
+/* ================= RATE LIMIT (IP LEVEL) ================= */
 
 const RATE_LIMIT = 10;
 const WINDOW_MS = 60 * 1000;
@@ -59,6 +59,34 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(
         { ok: false, error: "PHONE_REQUIRED" },
         { status: 400 }
+      );
+    }
+
+    // Enforce UAE format (must start with 971)
+    // Enforce UAE phone format: 971XXXXXXXXX (12 digits total)
+    if (!/^971\d{9}$/.test(phone)) {
+      return NextResponse.json(
+        { ok: false, error: "INVALID_PHONE_FORMAT" },
+        { status: 400 }
+     );
+   }
+   
+    // Enforce max 5 submissions per 24h per phone
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+
+    const count24h = await prisma.adSubmission.count({
+      where: {
+        phone,
+        createdAt: {
+          gte: since,
+        },
+      },
+    });
+
+    if (count24h >= 5) {
+      return NextResponse.json(
+        { ok: false, error: "DAILY_LIMIT_REACHED" },
+        { status: 429 }
       );
     }
 
