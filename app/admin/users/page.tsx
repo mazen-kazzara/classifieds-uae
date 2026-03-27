@@ -6,16 +6,14 @@ export default function UsersPage() {
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
-  const adminKey = process.env.NEXT_PUBLIC_ADMIN_KEY || ""
-
   async function loadUsers() {
-    const res = await fetch("/api/admin/users", {
-      headers: { "x-admin-key": adminKey },
-    })
+    const res = await fetch("/api/admin/users")
     const data = await res.json()
+
     if (data.ok) {
       setUsers(data.users)
     }
+
     setLoading(false)
   }
 
@@ -28,7 +26,6 @@ export default function UsersPage() {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-admin-key": adminKey,
       },
       body: JSON.stringify({ userId, role }),
     })
@@ -42,10 +39,15 @@ export default function UsersPage() {
     <div className="mx-auto max-w-5xl px-4 py-6">
       <h1 className="mb-6 text-2xl font-bold">Users</h1>
 
+      {users.length === 0 && (
+        <p className="text-gray-500">No users found</p>
+      )}
+
       <div className="space-y-4">
         {users.map((user) => (
           <div key={user.id} className="bg-white p-4 rounded shadow">
             <p><strong>Email:</strong> {user.email}</p>
+            <p><strong>Role:</strong> {user.role}</p>
 
             <select
               value={user.role}

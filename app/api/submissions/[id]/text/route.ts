@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import type { NextRequest } from "next/server";
+import { forbiddenWords } from "@/lib/forbidden-words";
+import { logAudit } from "@/lib/audit";
 
 const prisma = new PrismaClient();
 
@@ -8,15 +10,25 @@ function containsEmoji(text: string) {
   return /[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu.test(text);
 }
 
+function removeArabicDiacritics(text: string) {
+  return text.replace(/[\u064B-\u065F]/g, "");
+}
+
+function containsForbiddenContent(text: string) {
+  const lower = text.toLowerCase();
+  return forbiddenWords.some(word => lower.includes(word));
+}
+
 function calculatePrice(language: string, text: string) {
-  const length = text.length;
+  let processedText = text;
 
   if (language === "AR") {
-    return Math.ceil(length / 70) * 10;
+    processedText = removeArabicDiacritics(text);
+    return Math.ceil(processedText.length / 70) * 10;
   }
 
   if (language === "EN") {
-    return Math.ceil(length / 140) * 10;
+    return Math.ceil(text.length / 140) * 10;
   }
 
   return 0;
@@ -30,6 +42,12 @@ export async function POST(
     const { id } = await context.params;
     const body = await req.json();
     const text = String(body?.text ?? "").trim();
+
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "unknown";
+
+    const userAgent = req.headers.get("user-agent") || null;
 
     if (!text || text.length < 5) {
       return NextResponse.json(
@@ -45,6 +63,13 @@ export async function POST(
       );
     }
 
+    if (containsForbiddenContent(text)) {
+      return NextResponse.json(
+        { ok: false, error: "FORBIDDEN_CONTENT" },
+        { status: 400 }
+      );
+    }
+
     const submission = await prisma.adSubmission.findUnique({
       where: { id },
     });
@@ -56,6 +81,13 @@ export async function POST(
       );
     }
 
+    if (submission.status !== "DRAFT") {
+      return NextResponse.json(
+        { ok: false, error: "CANNOT_EDIT_AFTER_PAYMENT_STARTED" },
+        { status: 400 }
+      );
+    }
+
     if (!submission.language) {
       return NextResponse.json(
         { ok: false, error: "LANGUAGE_REQUIRED_FIRST" },
@@ -63,19 +95,14 @@ export async function POST(
       );
     }
 
-    // 🔒 10-MINUTE DUPLICATE PREVENTION
     const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
 
     const duplicate = await prisma.adSubmission.findFirst({
       where: {
         phone: submission.phone,
         text,
-        createdAt: {
-          gte: tenMinutesAgo,
-        },
-        NOT: {
-          id,
-        },
+        createdAt: { gte: tenMinutesAgo },
+        NOT: { id },
       },
     });
 
@@ -94,6 +121,25 @@ export async function POST(
         text,
         priceText,
         priceTotal: priceText,
+      },
+    });
+
+    await logAudit({
+      actorType: "USER",
+      actorId: submission.phone,
+      ipAddress: ip,
+      userAgent,
+      action: "TEXT_UPDATED",
+      entity: "AdSubmission",
+      entityId: submission.id,
+      oldValue: {
+        text: submission.text,
+        priceText: submission.priceText,
+      },
+      newValue: {
+        text: updated.text,
+        priceText: updated.priceText,
+        priceTotal: updated.priceTotal,
       },
     });
 

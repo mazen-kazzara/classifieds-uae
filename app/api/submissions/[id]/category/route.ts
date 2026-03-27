@@ -1,63 +1,43 @@
-import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
-import type { NextRequest } from "next/server";
-
-const prisma = new PrismaClient();
-
-const ALLOWED_CATEGORIES = [
-  "Real Estate",
-  "Vehicles",
-  "Jobs",
-  "Services",
-  "Electronics",
-  "Home & Furniture",
-  "Fashion",
-  "Pets",
-  "Other",
-];
+import { NextResponse } from "next/server"
+import { prisma } from "@/lib/prisma"
 
 export async function POST(
-  req: NextRequest,
+  req: Request,
   context: { params: Promise<{ id: string }> }
 ) {
-  try {
-    const { id } = await context.params;
-    const body = await req.json();
-    const category = String(body?.category ?? "");
+  const { id } = await context.params
+  const { category } = await req.json()
 
-    if (!ALLOWED_CATEGORIES.includes(category)) {
-      return NextResponse.json(
-        { ok: false, error: "INVALID_CATEGORY" },
-        { status: 400 }
-      );
-    }
-
-    const submission = await prisma.adSubmission.findUnique({
-      where: { id },
-    });
-
-    if (!submission) {
-      return NextResponse.json(
-        { ok: false, error: "NOT_FOUND" },
-        { status: 404 }
-      );
-    }
-
-    const updated = await prisma.adSubmission.update({
-      where: { id },
-      data: { category },
-    });
-
-    return NextResponse.json({
-      ok: true,
-      submissionId: updated.id,
-      category: updated.category,
-      status: updated.status,
-    });
-  } catch (err: any) {
-    return NextResponse.json(
-      { ok: false, error: "SERVER_ERROR", message: err?.message ?? "" },
-      { status: 500 }
-    );
+  if (!category) {
+    return NextResponse.json({ error: "Category required" }, { status: 400 })
   }
+
+  const submission = await prisma.adSubmission.findUnique({
+    where: { id },
+  })
+
+  if (!submission) {
+    return NextResponse.json({ error: "Submission not found" }, { status: 404 })
+  }
+
+  if (submission.status !== "DRAFT") {
+    return NextResponse.json(
+      { error: "Cannot modify submission after payment process started" },
+      { status: 400 }
+    )
+  }
+
+  if (!submission.language) {
+    return NextResponse.json(
+      { error: "Language must be selected first" },
+      { status: 400 }
+    )
+  }
+
+  await prisma.adSubmission.update({
+    where: { id },
+    data: { category },
+  })
+
+  return NextResponse.json({ success: true })
 }

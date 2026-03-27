@@ -4,153 +4,75 @@ import type { NextRequest } from "next/server";
 
 const prisma = new PrismaClient();
 
-/* ================= RATE LIMIT ================= */
-
-const RATE_LIMIT = 5;
-const WINDOW_MS = 60 * 1000;
-
-const ipStore = new Map<string, { count: number; windowStart: number }>();
-
-function checkRateLimit(ip: string) {
-  const now = Date.now();
-
-  if (!ipStore.has(ip)) {
-    ipStore.set(ip, { count: 1, windowStart: now });
-    return true;
-  }
-
-  const record = ipStore.get(ip)!;
-
-  if (now - record.windowStart > WINDOW_MS) {
-    ipStore.set(ip, { count: 1, windowStart: now });
-    return true;
-  }
-
-  if (record.count >= RATE_LIMIT) return false;
-
-  record.count++;
-  return true;
-}
-
-function generateFakePaymentRef() {
-  return "PAY_" + Math.random().toString(36).substring(2, 10).toUpperCase();
-}
-
-/* ================= HANDLER ================= */
-
 export async function POST(req: NextRequest) {
   try {
-    const ip =
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      "unknown";
-
-    if (!checkRateLimit(ip)) {
-      return NextResponse.json(
-        { ok: false, error: "RATE_LIMIT_EXCEEDED" },
-        { status: 429 }
-      );
-    }
+    console.log("PAYMENTS CREATE HIT");
 
     const body = await req.json();
-    const submissionId = String(body?.submissionId ?? "");
+    console.log("BODY:", body);
+
+    const { submissionId } = body;
 
     if (!submissionId) {
-      return NextResponse.json(
-        { ok: false, error: "SUBMISSION_ID_REQUIRED" },
-        { status: 400 }
-      );
+      throw new Error("NO_SUBMISSION_ID");
     }
 
-    const result = await prisma.$transaction(async (tx) => {
-      const submission = await tx.adSubmission.findUnique({
-        where: { id: submissionId },
-        include: { payment: true },
-      });
-
-      if (!submission) throw new Error("NOT_FOUND");
-
-      // Must be fully completed
-      if (
-        !submission.language ||
-        !submission.category ||
-        !submission.text ||
-        !submission.contactPhone ||
-        !submission.contactEmail
-      ) {
-        throw new Error("INCOMPLETE_SUBMISSION");
-      }
-
-      if (!submission.priceTotal || submission.priceTotal <= 0) {
-        throw new Error("INVALID_AMOUNT");
-      }
-
-      // Existing payment logic
-      const existing = await tx.payment.findUnique({
-        where: { submissionId },
-      });
-
-      if (existing) {
-        if (existing.status === "SUCCESS") {
-          throw new Error("ALREADY_PAID");
-        }
-
-        if (existing.status === "PENDING") {
-          return { reused: true, payment: existing };
-        }
-
-        // If FAILED → allow new one (delete old)
-        if (existing.status === "FAILED") {
-          await tx.payment.delete({
-            where: { id: existing.id },
-          });
-        }
-      }
-
-      // Ensure submission is in correct state
-      await tx.adSubmission.update({
-        where: { id: submission.id },
-        data: { status: "WAITING_PAYMENT" },
-      });
-
-      const paymentRef = generateFakePaymentRef();
-
-      const payment = await tx.payment.create({
-        data: {
-          submissionId: submission.id,
-          provider: "ZIINA_SIM",
-          amount: submission.priceTotal,
-          currency: "AED",
-          status: "PENDING",
-          providerRef: paymentRef,
-          rawPayload: {},
-        },
-      });
-
-      return { reused: false, payment };
+    const payment = await prisma.payment.findFirst({
+      where: { submissionId },
     });
+
+    if (!payment) {
+      throw new Error("PAYMENT_NOT_FOUND");
+    }
+
+    console.log("PAYMENT FOUND:", payment);
+
+    const ziinaRes = await fetch(process.env.ZIINA_BASE_URL!, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${process.env.ZIINA_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        amount: payment.amount * 100,
+        currency_code: "AED",
+        message: "Classified Ad Payment",
+        success_url: "https://classifiedsuae.ae/success",
+        cancel_url: "https://classifiedsuae.ae/cancel",
+        test: true,
+        metadata: {
+          providerRef: payment.providerRef,
+        },
+      }),
+    });
+
+    console.log("ZIINA STATUS:", ziinaRes.status);
+
+    const ziina = await ziinaRes.json();
+    await prisma.payment.update({
+     where: { id: payment.id },
+     data: {
+       providerRef: ziina.id, // overwrite with ziina id
+     },
+  });
+    console.log("ZIINA RESPONSE:", ziina);
+
+    const checkoutUrl = ziina?.redirect_url;
+
+    if (!checkoutUrl) {
+      throw new Error("NO_CHECKOUT_URL_FROM_ZIINA");
+    }
 
     return NextResponse.json({
-      ok: true,
-      paymentId: result.payment.id,
-      providerRef: result.payment.providerRef,
-      amount: result.payment.amount,
-      currency: result.payment.currency,
-      status: result.payment.status,
-      reused: result.reused,
+      checkoutUrl,
     });
-  } catch (err: any) {
-    const map: Record<string, number> = {
-      NOT_FOUND: 404,
-      INCOMPLETE_SUBMISSION: 400,
-      INVALID_AMOUNT: 400,
-      ALREADY_PAID: 400,
-    };
 
-    const status = map[err.message] ?? 500;
+  } catch (err: any) {
+    console.error("PAYMENT CREATE ERROR:", err);
 
     return NextResponse.json(
-      { ok: false, error: err.message || "SERVER_ERROR" },
-      { status }
+      { error: err.message || "UNKNOWN_ERROR" },
+      { status: 500 }
     );
   }
 }

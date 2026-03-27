@@ -13,19 +13,14 @@ export default function AdminLayout({
   const router = useRouter()
   const pathname = usePathname()
 
-  // allow login page without auth
-  if (pathname === "/admin/login") {
-    return <>{children}</>
-  }
-
   useEffect(() => {
-    if (status === "unauthenticated") {
+    if (status === "unauthenticated" && pathname !== "/admin/login") {
       router.replace("/admin/login")
     }
-  }, [status, router])
+  }, [status, pathname, router])
 
-  // 🚨 IMPORTANT: block rendering until session resolved
-  if (status !== "authenticated") {
+  // wait until session resolved
+  if (status === "loading") {
     return (
       <div className="p-10 text-center">
         loading...

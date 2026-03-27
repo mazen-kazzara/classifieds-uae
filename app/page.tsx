@@ -11,15 +11,34 @@ export default async function Home() {
     where: {
       status: "PUBLISHED",
       expiresAt: { gt: now },
+
+      // safer filtering
+      title: {
+        not: "",
+      },
+      description: {
+        not: "",
+      },
     },
     orderBy: {
-      createdAt: "desc", // newest first
+      createdAt: "desc",
     },
   });
 
-  const vehicles = ads.filter((a) => a.category === "Vehicles");
-  const properties = ads.filter((a) => a.category === "Real Estate");
-  const electronics = ads.filter((a) => a.category === "Electronics");
+  // normalize categories (VERY IMPORTANT)
+  const normalize = (v: string) => v.trim().toLowerCase();
+
+  const vehicles = ads.filter(
+    (a) => normalize(a.category) === "vehicles"
+  );
+
+  const properties = ads.filter(
+    (a) => normalize(a.category) === "real estate"
+  );
+
+  const electronics = ads.filter(
+    (a) => normalize(a.category) === "electronics"
+  );
 
   function Column({
     title,
@@ -46,8 +65,9 @@ export default async function Home() {
               className="block border rounded-lg p-3 hover:shadow-md hover:border-blue-400 transition"
             >
               <h3 className="font-semibold text-gray-800">
-                {ad.title ?? "Untitled"}
+                {ad.title}
               </h3>
+
               <p className="text-xs text-gray-500 mt-1">
                 {new Date(ad.createdAt).toLocaleDateString()}
               </p>
@@ -60,13 +80,13 @@ export default async function Home() {
 
   return (
     <div className="min-h-screen bg-gray-100">
-      {/* HEADER */}
       <header className="bg-white shadow-sm">
         <div className="max-w-7xl mx-auto px-6 py-5 flex justify-between items-center">
           <div>
             <h1 className="text-2xl font-bold text-blue-600">
               Classified UAE
             </h1>
+
             <p className="text-sm text-gray-500">
               Post fast. Pay once. Go live instantly.
             </p>
@@ -81,7 +101,6 @@ export default async function Home() {
         </div>
       </header>
 
-      {/* 3 COLUMN GRID */}
       <main className="max-w-7xl mx-auto px-6 py-8">
         <div className="grid gap-6 md:grid-cols-3">
           <Column title="Vehicles" items={vehicles} />
@@ -90,7 +109,6 @@ export default async function Home() {
         </div>
       </main>
 
-      {/* FOOTER */}
       <footer className="border-t bg-white mt-10">
         <div className="max-w-7xl mx-auto px-6 py-4 text-center text-xs text-gray-400">
           © {new Date().getFullYear()} Classified UAE — MVP

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import type { NextRequest } from "next/server";
+import { logAudit } from "@/lib/audit";
 
 const prisma = new PrismaClient();
 
@@ -29,9 +30,7 @@ function checkRateLimit(ip: string) {
     return true;
   }
 
-  if (record.count >= RATE_LIMIT) {
-    return false;
-  }
+  if (record.count >= RATE_LIMIT) return false;
 
   record.count++;
   return true;
@@ -44,6 +43,8 @@ export async function POST(req: NextRequest) {
     const ip =
       req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
       "unknown";
+
+    const userAgent = req.headers.get("user-agent") || null;
 
     if (!checkRateLimit(ip)) {
       return NextResponse.json(
@@ -62,24 +63,19 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Enforce UAE format (must start with 971)
-    // Enforce UAE phone format: 971XXXXXXXXX (12 digits total)
     if (!/^971\d{9}$/.test(phone)) {
       return NextResponse.json(
         { ok: false, error: "INVALID_PHONE_FORMAT" },
         { status: 400 }
-     );
-   }
-   
-    // Enforce max 5 submissions per 24h per phone
+      );
+    }
+
     const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
 
     const count24h = await prisma.adSubmission.count({
       where: {
         phone,
-        createdAt: {
-          gte: since,
-        },
+        createdAt: { gte: since },
       },
     });
 
@@ -90,7 +86,6 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Check for existing draft
     const existing = await prisma.adSubmission.findFirst({
       where: {
         phone,
@@ -99,6 +94,19 @@ export async function POST(req: NextRequest) {
     });
 
     if (existing) {
+
+      await logAudit({
+        actorType: "USER",
+        actorId: phone,
+        ipAddress: ip,
+        userAgent,
+        action: "REUSE_DRAFT",
+        entity: "AdSubmission",
+        entityId: existing.id,
+        oldValue: null,
+        newValue: { status: existing.status },
+      });
+
       return NextResponse.json({
         ok: true,
         reused: true,
@@ -114,12 +122,25 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    await logAudit({
+      actorType: "USER",
+      actorId: phone,
+      ipAddress: ip,
+      userAgent,
+      action: "CREATE_SUBMISSION",
+      entity: "AdSubmission",
+      entityId: submission.id,
+      oldValue: null,
+      newValue: { status: submission.status },
+    });
+
     return NextResponse.json({
       ok: true,
       reused: false,
       submissionId: submission.id,
       status: submission.status,
     });
+
   } catch (err: any) {
     return NextResponse.json(
       { ok: false, error: "SERVER_ERROR", message: err?.message ?? "" },

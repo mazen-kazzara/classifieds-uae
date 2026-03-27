@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
 
     const whereClause: any = {
       status: "PUBLISHED",
-      expiresAt: { gt: now },
+      
     };
 
     if (category) {

@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
 
 export const authOptions: NextAuthOptions = {
+  secret: process.env.NEXTAUTH_SECRET,
+
   providers: [
     CredentialsProvider({
       name: "Credentials",
@@ -36,27 +38,32 @@ export const authOptions: NextAuthOptions = {
         return {
           id: user.id,
           email: user.email,
-          role: user.role,
+          role: user.role ?? "SUPERVISOR",
         };
       },
     }),
   ],
+
   session: {
     strategy: "jwt",
   },
+
   pages: {
     signIn: "/admin/login",
   },
+
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.role = (user as any).role;
+        token.role = (user as any).role ?? "SUPERVISOR";
       }
       return token;
     },
+
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).role = token.role;
+        (session.user as any).id = token.sub;
+        (session.user as any).role = token.role ?? "SUPERVISOR";
       }
       return session;
     },

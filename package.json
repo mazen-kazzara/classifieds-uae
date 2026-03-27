@@ -11,12 +11,16 @@
   },
   "dependencies": {
     "@prisma/client": "^6.19.2",
+    "@upstash/ratelimit": "^2.0.8",
+    "@upstash/redis": "^1.37.0",
     "bcryptjs": "^2.4.3",
     "dotenv": "^17.2.4",
     "next": "16.1.4",
     "next-auth": "^4.24.10",
+    "rate-limiter-flexible": "^10.0.0",
     "react": "19.2.3",
-    "react-dom": "19.2.3"
+    "react-dom": "19.2.3",
+    "zod": "^4.3.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.1",

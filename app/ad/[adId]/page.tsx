@@ -10,20 +10,17 @@ export default async function AdPage(
 ) {
   const { adId } = await props.params;
 
-  if (!adId) {
-    notFound();
-  }
+const decodedAdId = decodeURIComponent(adId);
 
-  const ad = await prisma.ad.findUnique({
-    where: { id: adId },
-    include: {
-      media: {
-        orderBy: { position: "asc" },
-      },
+const ad = await prisma.ad.findUnique({
+  where: { id: decodedAdId },
+  include: {
+    media: {
+      orderBy: { position: "asc" },
     },
-  });
-
-  if (!ad || ad.status !== "PUBLISHED") {
+  },
+});
+  if (!ad) {
     notFound();
   }
 

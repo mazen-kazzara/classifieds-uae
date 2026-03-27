@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import type { NextRequest } from "next/server";
+import { logAudit } from "@/lib/audit";
 
 const prisma = new PrismaClient();
 
@@ -9,7 +10,6 @@ function normalizePhone(input: string) {
 }
 
 function isValidUAEPhone(phone: string) {
-  // UAE format: 971XXXXXXXXX (12 digits total)
   return /^971\d{9}$/.test(phone);
 }
 
@@ -25,6 +25,12 @@ export async function POST(
     const { id } = await context.params;
     const body = await req.json();
 
+    const ip =
+      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
+      "unknown";
+
+    const userAgent = req.headers.get("user-agent") || null;
+
     const contactPhoneRaw = String(body?.contactPhone ?? "");
     const contactEmailRaw = String(body?.contactEmail ?? "");
 
@@ -38,7 +44,7 @@ export async function POST(
       );
     }
 
-    if (!isValidEmail(contactEmail)) {
+    if (contactEmail && !isValidEmail(contactEmail)) {
       return NextResponse.json(
         { ok: false, error: "INVALID_EMAIL" },
         { status: 400 }
@@ -56,11 +62,43 @@ export async function POST(
       );
     }
 
+    if (submission.status !== "DRAFT") {
+      return NextResponse.json(
+        { ok: false, error: "CANNOT_EDIT_AFTER_PAYMENT_STARTED" },
+        { status: 400 }
+      );
+    }
+
+    if (!submission.text) {
+      return NextResponse.json(
+        { ok: false, error: "TEXT_REQUIRED_FIRST" },
+        { status: 400 }
+      );
+    }
+
     const updated = await prisma.adSubmission.update({
       where: { id },
       data: {
         contactPhone,
-        contactEmail,
+        contactEmail: contactEmail || null,
+      },
+    });
+
+    await logAudit({
+      actorType: "USER",
+      actorId: submission.phone,
+      ipAddress: ip,
+      userAgent,
+      action: "CONTACT_UPDATED",
+      entity: "AdSubmission",
+      entityId: submission.id,
+      oldValue: {
+        contactPhone: submission.contactPhone,
+        contactEmail: submission.contactEmail,
+      },
+      newValue: {
+        contactPhone: updated.contactPhone,
+        contactEmail: updated.contactEmail,
       },
     });
 

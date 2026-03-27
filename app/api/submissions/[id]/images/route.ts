@@ -7,10 +7,8 @@ import path from "path";
 
 const prisma = new PrismaClient();
 
-// Temp storage policy: max 6 hours
 const TEMP_TTL_MS = 6 * 60 * 60 * 1000;
 
-// Pricing
 function calculateImagePrice(count: number) {
   if (count === 0) return 0;
   if (count === 1) return 5;
@@ -36,6 +34,13 @@ export async function POST(
       );
     }
 
+    if (submission.status !== "DRAFT") {
+      return NextResponse.json(
+        { ok: false, error: "CANNOT_UPLOAD_AFTER_PAYMENT_STARTED" },
+        { status: 400 }
+      );
+    }
+
     if (!submission.priceText || !submission.text) {
       return NextResponse.json(
         { ok: false, error: "TEXT_REQUIRED_FIRST" },
@@ -43,7 +48,7 @@ export async function POST(
       );
     }
 
-    if (!submission.contactPhone || !submission.contactEmail) {
+    if (!submission.contactPhone) {
       return NextResponse.json(
         { ok: false, error: "CONTACT_REQUIRED_FIRST" },
         { status: 400 }
@@ -62,6 +67,17 @@ export async function POST(
       );
     }
 
+    const existingMedia = await prisma.submissionMedia.findMany({
+      where: { submissionId: id },
+    });
+
+    if (position === 2 && existingMedia.length === 0) {
+      return NextResponse.json(
+        { ok: false, error: "FIRST_IMAGE_REQUIRED" },
+        { status: 400 }
+      );
+    }
+
     if (!file || !(file instanceof File)) {
       return NextResponse.json(
         { ok: false, error: "FILE_REQUIRED" },
@@ -70,13 +86,21 @@ export async function POST(
     }
 
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) {
-      return NextResponse.json(
-        { ok: false, error: "INVALID_IMAGE_TYPE" },
-        { status: 400 }
-      );
-    }
+     return NextResponse.json(
+     { ok: false, error: "INVALID_IMAGE_TYPE" },
+     { status: 400 }
+  );
+}
 
-    // IMPORTANT: Save inside /public/uploads
+    const MAX_FILE_BYTES = 5 * 1024 * 1024;
+
+    if (file.size > MAX_FILE_BYTES) {
+     return NextResponse.json(
+     { ok: false, error: "IMAGE_TOO_LARGE" },
+     { status: 400 }
+  );
+}
+
     const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
 
     const ext =
@@ -97,7 +121,6 @@ export async function POST(
 
     const expiresAt = new Date(Date.now() + TEMP_TTL_MS);
 
-    // Save temp key (WITHOUT leading slash)
     await prisma.submissionMedia.upsert({
       where: {
         submissionId_position: {
@@ -140,23 +163,15 @@ export async function POST(
         imagesCount,
         priceImages,
         priceTotal,
-        status: "WAITING_PAYMENT",
       },
     });
 
     return NextResponse.json({
       ok: true,
-      submissionId: updated.id,
       imagesCount: updated.imagesCount,
       priceImages: updated.priceImages,
       priceTotal: updated.priceTotal,
       status: updated.status,
-      tempMedia: media.map((m) => ({
-        position: m.position,
-        tempKey: m.tempKey,
-        url: `/uploads/${m.tempKey}`, // important
-        expiresAt: m.expiresAt,
-      })),
     });
   } catch (err: any) {
     return NextResponse.json(

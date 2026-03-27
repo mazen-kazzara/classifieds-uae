@@ -15,7 +15,9 @@ model AdSubmission {
   category         String?
   text             String?
   contactPhone     String?
+  telegramChatId   String?
   contactEmail     String?
+  images           String[]
   imagesCount      Int      @default(0)
 
   priceText        Int?
@@ -43,6 +45,7 @@ model Ad {
   title          String?
   description    String
   category       String
+  //images         String[]
   status         AdStatus @default(PENDING)
 
   expiresAt      DateTime
@@ -50,7 +53,7 @@ model Ad {
 
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
-
+  
   media          Media[]
 }
 
@@ -117,28 +120,23 @@ model User {
 }
 
 model AuditLog {
-  id String @id @default(cuid())
+  id        String   @id @default(cuid())
 
-  // who triggered
-  userId   String?
-  actor    String   // "ADMIN" | "BOT" | "WEBHOOK" | "SYSTEM"
+  userId    String?
+  actor     String   // USER / ADMIN / SYSTEM / WEBHOOK
 
-  action   String   // e.g. SUBMISSION_CREATED
-  entity   String   // e.g. SUBMISSION
-  entityId String?
+  action    String
+  entity    String
+  entityId  String?
 
-  payload  Json?
+  payload   Json?
 
   ipAddress String?
   userAgent String?
 
   createdAt DateTime @default(now())
 
-  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-  @@index([entity, entityId])
-  @@index([action])
+  user User? @relation(fields: [userId], references: [id])
 }
 
 enum SubmissionStatus {
