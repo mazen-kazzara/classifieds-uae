@@ -7,6 +7,9 @@ const path = require("path");
 const os = require("os");
 const crypto = require("crypto");
 const { spawnSync } = require("child_process");
+const { PrismaClient } = require("@prisma/client");
+
+const prisma = new PrismaClient();
 
 const bot = new Telegraf(process.env.TELEGRAM_BOT_TOKEN);
 
@@ -53,7 +56,24 @@ bot.catch((err) => {
   console.error("BOT ERROR:", err);
 });
 
-/* ---------- /help and /cancel ---------- */
+/* ---------- Step Guard ---------- */
+// Returns true if step matches, false + sends message if not
+function guardStep(ctx, expectedStep) {
+  const state = ensureSession(ctx);
+  if (state.step !== expectedStep) {
+    ctx
+      .reply(
+        state.lang === "ar"
+          ? "⚠️ هذه الخطوة تم تنفيذها بالفعل أو غير متاحة الآن."
+          : "⚠️ This step is already completed or not available now."
+      )
+      .catch(() => {});
+    return false;
+  }
+  return true;
+}
+
+/* ---------- /help ---------- */
 
 bot.command("help", async (ctx) => {
   await ctx.reply(
@@ -143,6 +163,8 @@ After successful payment, your ad goes live and the ad link is sent here.
   );
 });
 
+/* ---------- /cancel ---------- */
+
 bot.command("cancel", async (ctx) => {
   const state = ensureSession(ctx);
 
@@ -189,6 +211,18 @@ bot.action("cancel_demo", async (ctx) => {
 bot.action("publish_demo", async (ctx) => {
   const state = ensureSession(ctx);
 
+  // Guard: only allow from summary step
+  if (state.step !== "summary") {
+    await ctx
+      .reply(
+        state.lang === "ar"
+          ? "⚠️ هذه الخطوة غير متاحة الآن."
+          : "⚠️ This action is not available now."
+      )
+      .catch(() => {});
+    return;
+  }
+
   try {
     const imgPrice = state.images.length * 5;
     const total = state.textPrice + imgPrice;
@@ -231,6 +265,8 @@ bot.action("publish_demo", async (ctx) => {
     }
 
     state.submissionId = submissionId;
+    // Mark flow as done so user cannot re-submit
+    state.step = "done";
 
     /* 2. create Ziina payment */
     const paymentRes = await axios.post(
@@ -475,64 +511,101 @@ function categoryKeyboard(state) {
 bot.start(async (ctx) => {
   const state = ensureSession(ctx);
 
+  // DB-aware check: only block if the LATEST submission for this phone is still active
+  if (state.phone) {
+    try {
+      const lastSubmission = await prisma.adSubmission.findFirst({
+        where: { phone: state.phone },
+        orderBy: { createdAt: "desc" },
+      });
+
+      if (
+        lastSubmission &&
+        ["DRAFT", "WAITING_PAYMENT"].includes(lastSubmission.status)
+      ) {
+        await ctx.reply(
+          state.lang === "ar"
+            ? `⚠️ لديك عملية إنشاء إعلان قيد التنفيذ.
+
+يمكنك إكمالها أو إلغاؤها أولاً باستخدام /cancel.`
+            : `⚠️ You already have an ad submission in progress.
+
+Please finish it or cancel it first using /cancel.`
+        );
+        return;
+      }
+    } catch (err) {
+      console.error("DB CHECK ERROR in /start:", err);
+      // If DB check fails, proceed anyway to not block the user
+    }
+  }
+
+  // Also check in-session step (non-DB flow guard)
   if (state.step && state.step !== "consent") {
     await ctx.reply(
       state.lang === "ar"
         ? `⚠️ لديك عملية إنشاء إعلان قيد التنفيذ.
 
-يمكنك إكمالها أو إلغاؤها أولاً.`
+يمكنك إكمالها أو إلغاؤها أولاً باستخدام /cancel.`
         : `⚠️ You already have an ad submission in progress.
 
-Please finish it or cancel it first.`
+Please finish it or cancel it first using /cancel.`
     );
     return;
   }
 
+  // Reset and start fresh
   ctx.session.state = initState();
   ensureSession(ctx).telegramChatId = String(ctx.chat?.id || "");
 
   await ctx.reply(
-    `🚀 Welcome to Classifieds UAE
+    `🚀 مرحباً بك في Classifieds UAE
+🚀 Welcome to Classifieds UAE
 
-Post your ad in less than 1 minute.
+ابدأ الآن وانشر إعلانك خلال أقل من دقيقة.
+Start now and post your ad in under 1 minute.
 
-Categories:
+🚗 سيارات
 🚗 Vehicles
+
+🏠 عقارات
 🏠 Real Estate
+
+💻 إلكترونيات
 💻 Electronics
 
-Press Agree to continue.
+━━━━━━━━━━━━━━
+
+🔥 إعلانك سيُنشر فوراً بعد الدفع
+🔥 Your ad will be published instantly after payment
+
+📲 جهّز نص الإعلان + رقم التواصل
+📲 Prepare your ad text + contact number
 
 ━━━━━━━━━━━━━━
 
-🚀 مرحباً بك في Classifieds UAE
-
-انشر إعلانك خلال أقل من دقيقة.
-
-الفئات المتاحة:
-🚗 سيارات
-🏠 عقارات
-💻 إلكترونيات
-
-اضغط موافق للمتابعة.
+👉 اضغط "موافق" وابدأ الآن
+👉 Press "Agree" and start now
 
 ━━━━━━━━━━━━━━
 
-تنبيه:
-باستخدامك لهذا البوت أنت توافق على عدم نشر:
-- ألفاظ نابية
-- سياسة
-- محتوى جنسي
-- قمار
-- أي محتوى غير قانوني
+⚠️ تنبيه
+⚠️ Notice
 
-Disclaimer:
-By using this bot you agree not to submit:
-- profanity
-- politics
-- sexual content
-- gambling
-- illegal content`,
+ممنوع نشر:
+Not allowed:
+• ألفاظ نابية
+• Profanity
+• سياسة
+• Politics
+• محتوى جنسي
+• Sexual content
+• قمار
+• Gambling
+• محتوى غير قانوني
+
+📌 يتحمل الناشر كامل المسؤولية القانونية عن محتوى الإعلان، وتخلي المنصة أي مسؤولية أو تبعات قانونية.
+📌 The advertiser assumes full legal responsibility for the ad content, and the platform disclaims any liability or legal consequences.`,
     Markup.inlineKeyboard([
       [
         Markup.button.callback("أوافق", "agree"),
@@ -542,10 +615,15 @@ By using this bot you agree not to submit:
   );
 });
 
-bot.action("agree", async (ctx) => {
-  ensureSession(ctx).step = "language";
+/* ---------- Agree ---------- */
 
-  await ctx.editMessageReplyMarkup();
+bot.action("agree", async (ctx) => {
+  if (!guardStep(ctx, "consent")) return;
+
+  const state = ensureSession(ctx);
+  state.step = "language";
+
+  await ctx.editMessageReplyMarkup().catch(() => {});
 
   await ctx.reply(
     "Choose language / اختر اللغة",
@@ -558,23 +636,29 @@ bot.action("agree", async (ctx) => {
   );
 });
 
+/* ---------- Language ---------- */
+
 bot.action("lang_ar", async (ctx) => {
+  if (!guardStep(ctx, "language")) return;
+
   const state = ensureSession(ctx);
   state.lang = "ar";
   state.step = "name";
   state.telegramChatId = String(ctx.chat?.id || "");
 
-  await ctx.editMessageReplyMarkup();
+  await ctx.editMessageReplyMarkup().catch(() => {});
   await ctx.reply("تم اختيار العربية\nاكتب اسمك الثنائي");
 });
 
 bot.action("lang_en", async (ctx) => {
+  if (!guardStep(ctx, "language")) return;
+
   const state = ensureSession(ctx);
   state.lang = "en";
   state.step = "name";
   state.telegramChatId = String(ctx.chat?.id || "");
 
-  await ctx.editMessageReplyMarkup();
+  await ctx.editMessageReplyMarkup().catch(() => {});
   await ctx.reply("English selected\nEnter your full name");
 });
 
@@ -582,12 +666,13 @@ bot.action("lang_en", async (ctx) => {
 
 contactMethods.forEach((method) => {
   bot.action("contact_" + method.id, async (ctx) => {
-    const state = ensureSession(ctx);
+    if (!guardStep(ctx, "contactMethod")) return;
 
+    const state = ensureSession(ctx);
     state.contactMethod = method.id;
     state.step = "category";
 
-    await ctx.editMessageReplyMarkup();
+    await ctx.editMessageReplyMarkup().catch(() => {});
 
     await ctx.reply(
       state.lang === "ar"
@@ -602,15 +687,18 @@ contactMethods.forEach((method) => {
 
 categories.forEach((cat) => {
   bot.action("cat_" + cat.id, async (ctx) => {
-    const state = ensureSession(ctx);
+    if (!guardStep(ctx, "category")) return;
 
+    const state = ensureSession(ctx);
     state.category = cat.id;
     state.step = "text";
 
-    await ctx.editMessageReplyMarkup();
+    await ctx.editMessageReplyMarkup().catch(() => {});
 
     await ctx.reply(
-      state.lang === "ar" ? `اخترت الفئة: ${cat.ar}` : `You chose: ${cat.en}`
+      state.lang === "ar"
+        ? `اخترت الفئة: ${cat.ar}`
+        : `You chose: ${cat.en}`
     );
 
     await ctx.reply(
@@ -634,6 +722,21 @@ bot.on("text", async (ctx) => {
   state.telegramChatId = String(ctx.chat?.id || "");
 
   const msg = (ctx.message.text || "").trim();
+
+  // Block commands from being processed as text
+  if (msg.startsWith("/")) return;
+
+  if (!state.step) return;
+
+  // Block text input on completed/inappropriate steps
+  if (["imageAsk", "summary", "done"].includes(state.step)) {
+    await ctx.reply(
+      state.lang === "ar"
+        ? "⚠️ هذه الخطوة تم تنفيذها بالفعل. اضغط على الأزرار للمتابعة."
+        : "⚠️ This step is already completed. Please use the buttons to continue."
+    );
+    return;
+  }
 
   if (state.step === "name") {
     if (state.lang === "ar" && (!hasArabic(msg) || hasEnglish(msg))) {
@@ -740,8 +843,14 @@ Price: ${price} AED`
         : "Do you want to add images? Image price is 5 AED (max 2)",
       Markup.inlineKeyboard([
         [
-          Markup.button.callback(state.lang === "ar" ? "نعم" : "Yes", "img_yes"),
-          Markup.button.callback(state.lang === "ar" ? "لا" : "No", "img_no"),
+          Markup.button.callback(
+            state.lang === "ar" ? "نعم" : "Yes",
+            "img_yes"
+          ),
+          Markup.button.callback(
+            state.lang === "ar" ? "لا" : "No",
+            "img_no"
+          ),
         ],
       ])
     );
@@ -753,6 +862,8 @@ Price: ${price} AED`
 /* ---------- Image choice ---------- */
 
 bot.action("img_yes", async (ctx) => {
+  if (!guardStep(ctx, "imageAsk")) return;
+
   const state = ensureSession(ctx);
   state.expectingImage = true;
 
@@ -766,11 +877,26 @@ bot.action("img_yes", async (ctx) => {
 });
 
 bot.action("img_no", async (ctx) => {
+  if (!guardStep(ctx, "imageAsk")) return;
+
   await sendSummary(ctx);
 });
 
 bot.action("img2_yes", async (ctx) => {
   const state = ensureSession(ctx);
+
+  // img2_yes is valid only when we've received 1 image and are waiting for the second
+  if (state.images.length !== 1) {
+    await ctx
+      .reply(
+        state.lang === "ar"
+          ? "⚠️ هذا الخيار غير متاح الآن."
+          : "⚠️ This option is not available now."
+      )
+      .catch(() => {});
+    return;
+  }
+
   state.expectingImage = true;
 
   await ctx.reply(
@@ -781,6 +907,20 @@ bot.action("img2_yes", async (ctx) => {
 });
 
 bot.action("img2_no", async (ctx) => {
+  const state = ensureSession(ctx);
+
+  // img2_no is valid only when we've received 1 image
+  if (state.images.length !== 1) {
+    await ctx
+      .reply(
+        state.lang === "ar"
+          ? "⚠️ هذا الخيار غير متاح الآن."
+          : "⚠️ This option is not available now."
+      )
+      .catch(() => {});
+    return;
+  }
+
   await sendSummary(ctx);
 });
 
@@ -905,6 +1045,9 @@ async function sendSummary(ctx) {
   const imgPrice = s.images.length * 5;
   const total = s.textPrice + imgPrice;
   const contactMethod = getContactMethodLabel(s);
+
+  // Mark step as summary so text input is blocked
+  s.step = "summary";
 
   const summaryText =
     s.lang === "ar"
