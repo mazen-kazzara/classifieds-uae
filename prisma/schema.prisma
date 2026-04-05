@@ -6,56 +6,162 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
 
+model User {
+  id        String   @id @default(cuid())
+  phone     String   @unique
+  email     String?  @unique
+  name      String?
+  password  String?
+  role      UserRole @default(USER)
+
+  otpCode      String?
+  otpExpiresAt DateTime?
+  otpAttempts  Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submissions AdSubmission[]
+  audits      AuditLog[]
+
+  @@index([phone])
+}
+
+model Category {
+  id          String  @id @default(cuid())
+  name        String  @unique
+  nameAr      String
+  slug        String  @unique
+  icon        String?
+  description String?
+  isActive    Boolean @default(true)
+  sortOrder   Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submissions AdSubmission[]
+}
+
+model Package {
+  id               String  @id @default(cuid())
+  name             String  @unique
+  nameAr           String
+  description      String?
+  price            Int
+  durationDays     Int     @default(7)
+  maxImages        Int     @default(2)
+  isFeatured       Boolean @default(false)
+  isPinned         Boolean @default(false)
+  includesTelegram Boolean @default(false)
+  isActive         Boolean @default(true)
+  sortOrder        Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  submissions AdSubmission[]
 }
 
 model AdSubmission {
-  id               String   @id @default(cuid())
-  phone            String
-  language         String?
-  category         String?
-  text             String?
-  contactPhone     String?
-  telegramChatId   String?
-  contactEmail     String?
-  images           String[]
-  imagesCount      Int      @default(0)
+  id             String    @id @default(cuid())
+  phone          String
+  language       String?
+  categoryId     String?
+  category       Category? @relation(fields: [categoryId], references: [id])
+  categoryName   String?
+  text           String?
+  title          String?
+  contactPhone   String?
+  whatsappNumber String?
+  telegramChatId String?
+  contactEmail   String?
+  contactMethod  String?
+  contentType    String    @default("ad")
 
-  priceText        Int?
-  priceImages      Int?
-  priceTotal       Int?
+  offerStartDate DateTime?
+  offerEndDate   DateTime?
+  bookingEnabled Boolean   @default(false)
+  bookingType    String?
 
-  status           SubmissionStatus @default(DRAFT)
+  images      String[]
+  imagesCount Int      @default(0)
 
-  payment          Payment?
-  ad               Ad?
+  priceText   Int?
+  priceImages Int?
+  priceTotal  Int?
+
+  packageId String?
+  package   Package? @relation(fields: [packageId], references: [id])
+
+  status        SubmissionStatus @default(DRAFT)
+  publishTarget String           @default("website")
+
+  userId String?
+  user   User?   @relation(fields: [userId], references: [id])
+
+  adPrice      Int?
+  isNegotiable Boolean @default(false)
+
+  payment         Payment?
+  ad              Ad?
   submissionMedia SubmissionMedia[]
 
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([phone])
   @@index([status])
+  @@index([userId])
 }
 
 model Ad {
-  id             String   @id @default(cuid())
-  submissionId   String   @unique
-  submission     AdSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  id           String       @id @default(cuid())
+  submissionId String       @unique
+  submission   AdSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
-  title          String?
-  description    String
-  category       String
-  //images         String[]
-  status         AdStatus @default(PENDING)
+  title       String?
+  description String
+  category    String
+  contentType String  @default("ad")
 
-  expiresAt      DateTime
-  publishedAt    DateTime?
+  offerStartDate DateTime?
+  offerEndDate   DateTime?
+  bookingEnabled Boolean   @default(false)
+  bookingType    String?
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
-  
-  media          Media[]
+  contactPhone   String?
+  whatsappNumber String?
+  telegramChatId String?
+  contactEmail   String?
+  contactMethod  String?
+
+  isFeatured Boolean @default(false)
+  isPinned   Boolean @default(false)
+
+  status      AdStatus @default(PENDING)
+  expiresAt   DateTime
+  publishedAt DateTime?
+
+  viewsCount     Int @default(0)
+  whatsappClicks Int @default(0)
+  callClicks     Int @default(0)
+  bookingClicks  Int @default(0)
+
+  adPrice      Int?
+  isNegotiable Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  media Media[]
+
+  @@index([category])
+  @@index([status])
+  @@index([isFeatured])
+  @@index([contentType])
 }
 
 model Media {
@@ -72,66 +178,84 @@ model Media {
 }
 
 model SubmissionMedia {
-  id           String   @id @default(cuid())
+  id           String       @id @default(cuid())
   submissionId String
   submission   AdSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
-  // local temp path or temp URL (NOT permanent)
-  tempKey      String
-  position     Int
-
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
+  tempKey   String
+  position  Int
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 
   @@unique([submissionId, position])
   @@index([submissionId])
   @@index([expiresAt])
 }
+
 model Payment {
   id String @id @default(cuid())
 
-  submissionId String @unique
+  submissionId String       @unique
   submission   AdSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
-  provider     String
-  amount       Int
-  currency     String
-  status       PaymentStatus
+  provider    String
+  amount      Int
+  currency    String
+  status      PaymentStatus
 
-  providerRef  String @unique
-  rawPayload   Json?
+  providerRef String @unique
+  rawPayload  Json?
 
   createdAt DateTime @default(now())
 
   @@index([providerRef])
 }
 
-model User {
-  id       String   @id @default(cuid())
-  email    String   @unique
-  phone    String?  @unique
-  name     String?
-  password String?
-  role     UserRole @default(ADMIN)
+model PricingConfig {
+  id             String  @id @default(cuid())
+  textPrice      Int
+  imagePrice     Int
+  adDurationDays Int
+
+  freeAutoPublish    Boolean @default(false)
+  freeRequiresReview Boolean @default(true)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+}
 
-  audits AuditLog[]
+model SiteSetting {
+  id    String @id @default(cuid())
+  key   String @unique
+  value String
+
+  updatedAt DateTime @updatedAt
+}
+
+model OtpRequest {
+  id        String   @id @default(cuid())
+  phone     String
+  code      String
+  expiresAt DateTime
+  used      Boolean  @default(false)
+  attempts  Int      @default(0)
+
+  createdAt DateTime @default(now())
+
+  @@index([phone])
 }
 
 model AuditLog {
-  id        String   @id @default(cuid())
+  id String @id @default(cuid())
 
   userId    String?
-  actor     String   // USER / ADMIN / SYSTEM / WEBHOOK
+  actor     String
 
-  action    String
-  entity    String
-  entityId  String?
+  action   String
+  entity   String
+  entityId String?
 
   payload   Json?
-
   ipAddress String?
   userAgent String?
 
@@ -144,6 +268,7 @@ enum SubmissionStatus {
   DRAFT
   WAITING_PAYMENT
   PAID
+  PENDING_REVIEW
   PUBLISHED
   PUBLISHED_PARTIAL
   REJECTED
@@ -162,19 +287,11 @@ enum PaymentStatus {
   PENDING
   SUCCESS
   FAILED
+  REFUNDED
 }
 
 enum UserRole {
+  USER
   ADMIN
   SUPERVISOR
-}
-model PricingConfig {
-  id               String  @id @default(cuid())
-
-  textPrice        Int
-  imagePrice       Int
-  adDurationDays   Int
-
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
 }

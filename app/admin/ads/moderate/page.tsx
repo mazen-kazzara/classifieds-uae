@@ -29,7 +29,7 @@ export default async function ModerateAdsPage() {
             className="rounded-lg bg-white p-6 shadow"
           >
             <p><strong>Phone:</strong> {submission.phone}</p>
-            <p><strong>Category:</strong> {submission.category}</p>
+            <p><strong>Category:</strong> {submission.categoryName}</p>
             <p><strong>Description:</strong> {submission.text}</p>
 
             <div className="mt-4 flex gap-4">

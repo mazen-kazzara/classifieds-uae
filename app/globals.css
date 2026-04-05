@@ -1,3 +1,229 @@
+@import url('https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap');
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+
+:root {
+  --bg: #F5F5F5;
+  --surface: #FFFFFF;
+  --surface-2: #FAFAFA;
+  --text: #111111;
+  --text-muted: #666666;
+  --border: #D9D9D9;
+  --primary: #00B56A;
+  --primary-hover: #009959;
+  --danger: #FF3B30;
+  --shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --header-h: 60px;
+}
+
+[data-theme="dark"] {
+  --bg: #0F1115;
+  --surface: #171A21;
+  --surface-2: #1E222B;
+  --text: #F5F7FA;
+  --text-muted: #A9B1BC;
+  --border: #2B313C;
+  --primary: #00C978;
+  --primary-hover: #00B56A;
+  --danger: #FF5A52;
+  --shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    font-family: 'Inter', 'Cairo', sans-serif;
+  }
+  body {
+    background-color: var(--bg);
+    color: var(--text);
+    font-family: 'Inter', 'Cairo', sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+  :lang(ar), [dir="rtl"] {
+    font-family: 'Cairo', sans-serif;
+  }
+  * {
+    border-color: var(--border);
+  }
+  input, textarea, select, button {
+    font-family: inherit;
+  }
+}
+
+@layer components {
+  /* Buttons */
+  .btn-primary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 44px;
+    padding: 0 1.25rem;
+    background-color: var(--primary);
+    color: #fff;
+    font-weight: 600;
+    font-size: 0.875rem;
+    border-radius: var(--radius-md);
+    border: none;
+    cursor: pointer;
+    transition: background-color 0.15s, opacity 0.15s;
+    white-space: nowrap;
+  }
+  .btn-primary:hover { background-color: var(--primary-hover); }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-secondary {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 44px;
+    padding: 0 1.25rem;
+    background-color: var(--surface);
+    color: var(--text);
+    font-weight: 500;
+    font-size: 0.875rem;
+    border-radius: var(--radius-md);
+    border: 1.5px solid var(--border);
+    cursor: pointer;
+    transition: border-color 0.15s, background-color 0.15s;
+    white-space: nowrap;
+  }
+  .btn-secondary:hover { border-color: var(--primary); color: var(--primary); }
+
+  .btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    height: 44px;
+    padding: 0 1rem;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 0.875rem;
+    border-radius: var(--radius-md);
+    border: none;
+    cursor: pointer;
+    transition: color 0.15s, background-color 0.15s;
+  }
+  .btn-ghost:hover { background-color: var(--surface-2); color: var(--text); }
+
+  /* Cards */
+  .card {
+    background-color: var(--surface);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow);
+  }
+
+  /* Inputs */
+  .input {
+    width: 100%;
+    height: 44px;
+    padding: 0 1rem;
+    background-color: var(--surface);
+    color: var(--text);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.15s;
+  }
+  .input:focus { border-color: var(--primary); }
+  .input.error { border-color: var(--danger); background-color: color-mix(in srgb, var(--danger) 5%, var(--surface)); }
+  .input::placeholder { color: var(--text-muted); }
+
+  .textarea {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background-color: var(--surface);
+    color: var(--text);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    outline: none;
+    resize: none;
+    transition: border-color 0.15s;
+    font-family: inherit;
+  }
+  .textarea:focus { border-color: var(--primary); }
+  .textarea.error { border-color: var(--danger); }
+  .textarea::placeholder { color: var(--text-muted); }
+
+  .select {
+    width: 100%;
+    height: 44px;
+    padding: 0 1rem;
+    background-color: var(--surface);
+    color: var(--text);
+    border: 1.5px solid var(--border);
+    border-radius: var(--radius-md);
+    font-size: 0.875rem;
+    outline: none;
+    transition: border-color 0.15s;
+    cursor: pointer;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 0.75rem center;
+    padding-right: 2.5rem;
+  }
+  .select:focus { border-color: var(--primary); }
+
+  /* Labels */
+  .label {
+    display: block;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 0.375rem;
+  }
+  .label-hint {
+    font-size: 0.75rem;
+    font-weight: 400;
+    color: var(--text-muted);
+  }
+
+  /* Field error */
+  .field-error {
+    font-size: 0.75rem;
+    color: var(--danger);
+    margin-top: 0.25rem;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+  }
+
+  /* Badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.6875rem;
+    font-weight: 600;
+    padding: 0.125rem 0.5rem;
+    border-radius: 999px;
+  }
+
+  /* Divider */
+  .divider { border: none; border-top: 1.5px solid var(--border); margin: 0; }
+}
+
+@layer utilities {
+  .line-clamp-1 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; }
+  .line-clamp-2 { overflow: hidden; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+  .text-primary { color: var(--primary) !important; }
+  .text-danger { color: var(--danger) !important; }
+  .text-app { color: var(--text); }
+  .text-muted { color: var(--text-muted); }
+  .bg-surface { background-color: var(--surface); }
+  .bg-surface-2 { background-color: var(--surface-2); }
+  .bg-app { background-color: var(--bg); }
+  .border-app { border-color: var(--border); }
+}

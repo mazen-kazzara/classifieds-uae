@@ -106,10 +106,12 @@ export async function POST(req: Request) {
         phone,
         contactPhone: phone,
         telegramChatId: chatId ? String(chatId) : null,
-        category: normalizedCategory,
+        categoryName: normalizedCategory,
         text,
         language: normalizedLanguage,
         priceTotal: price,
+        adPrice: data.adPrice != null ? Number(data.adPrice) : null,
+        isNegotiable: data.isNegotiable === true,
         status: "WAITING_PAYMENT",
       },
     });

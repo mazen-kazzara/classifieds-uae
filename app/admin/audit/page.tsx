@@ -1,85 +1,46 @@
 "use client";
-
 import { useEffect, useState } from "react";
 
-function cleanIP(ip: string | null) {
-  if (!ip) return "-";
-  return ip.replace("::ffff:", "");
-}
-
 export default function AuditPage() {
-  const [logs, setLogs] = useState<any[]>([]);
-  const [expanded, setExpanded] = useState<string | null>(null);
+  const [logs, setLogs] = useState<Array<{id:string;action:string;entity:string;actor:string;ipAddress?:string;createdAt:string;payload?:Record<string,unknown>}>>([]);
+  const [expanded, setExpanded] = useState<string|null>(null);
 
   useEffect(() => {
-    fetch("/api/admin/audit")
-      .then(res => res.json())
-      .then(data => {
-        if (data.ok) setLogs(data.logs);
-      });
+    fetch("/api/admin/audit").then(r=>r.json()).then(d => { if (d.ok) setLogs(d.logs); });
   }, []);
 
   return (
-    <div style={{ padding: 20 }}>
-      <h1>Audit Logs</h1>
-
-      <table border={1} cellPadding={8} style={{ width: "100%", marginTop: 20 }}>
-        <thead>
-          <tr>
-            <th>Action</th>
-            <th>Entity</th>
-            <th>Phone / Actor</th>
-            <th>IP</th>
-            <th>Date</th>
-          </tr>
-        </thead>
-        <tbody>
-          {logs.map(log => (
-            <>
-              <tr
-                key={log.id}
-                style={{ cursor: "pointer" }}
-                onClick={() =>
-                  setExpanded(expanded === log.id ? null : log.id)
-                }
-              >
-                <td>{log.action}</td>
-                <td>{log.entity}</td>
-                <td>
-                  {log.payload?.actorId ||
-                    log.user?.phone ||
-                    log.actor ||
-                    "-"}
-                </td>
-                <td>{cleanIP(log.ipAddress)}</td>
-                <td>{new Date(log.createdAt).toLocaleString()}</td>
-              </tr>
-
-              {expanded === log.id && (
-                <tr>
-                  <td colSpan={5}>
-                    <div style={{ display: "flex", gap: 40 }}>
-                      <div>
-                        <strong>Old Value</strong>
-                        <pre>
-                          {JSON.stringify(log.payload?.oldValue, null, 2)}
-                        </pre>
-                      </div>
-
-                      <div>
-                        <strong>New Value</strong>
-                        <pre>
-                          {JSON.stringify(log.payload?.newValue, null, 2)}
-                        </pre>
-                      </div>
-                    </div>
-                  </td>
+    <div className="p-6">
+      <h1 className="text-2xl font-extrabold text-gray-900 mb-6">Audit Log</h1>
+      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
+        <table className="w-full text-sm">
+          <thead className="bg-gray-50 border-b">
+            <tr>
+              <th className="text-left p-3 font-semibold text-gray-600">Action</th>
+              <th className="text-left p-3 font-semibold text-gray-600">Entity</th>
+              <th className="text-left p-3 font-semibold text-gray-600">Actor</th>
+              <th className="text-left p-3 font-semibold text-gray-600">IP</th>
+              <th className="text-left p-3 font-semibold text-gray-600">Time</th>
+            </tr>
+          </thead>
+          <tbody className="divide-y">
+            {logs.map((log) => (
+              <>
+                <tr key={log.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpanded(expanded===log.id ? null : log.id)}>
+                  <td className="p-3 font-medium text-gray-900">{log.action}</td>
+                  <td className="p-3 text-gray-600">{log.entity}</td>
+                  <td className="p-3 text-gray-600">{(log.payload as Record<string,unknown>)?.actorId as string || log.actor}</td>
+                  <td className="p-3 text-gray-400 text-xs">{log.ipAddress?.replace("::ffff:","") || "-"}</td>
+                  <td className="p-3 text-gray-400 text-xs">{new Date(log.createdAt).toLocaleString("en-AE")}</td>
                 </tr>
-              )}
-            </>
-          ))}
-        </tbody>
-      </table>
+                {expanded===log.id && (
+                  <tr key={`${log.id}-expanded`}><td colSpan={5} className="p-3 bg-gray-50"><pre className="text-xs text-gray-600 overflow-auto">{JSON.stringify(log.payload, null, 2)}</pre></td></tr>
+                )}
+              </>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

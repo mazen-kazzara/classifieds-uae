@@ -1,48 +1,18 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import { unlink } from "fs/promises";
 import path from "path";
-
-const prisma = new PrismaClient();
-
-const UPLOAD_DIR = "/tmp/classifieds_uploads";
 
 export async function POST() {
   try {
     const now = new Date();
-
-    const expired = await prisma.submissionMedia.findMany({
-      where: { expiresAt: { lte: now } },
-      select: { id: true, tempKey: true },
-      take: 200, // avoid huge delete in one call
-    });
-
+    const expired = await prisma.submissionMedia.findMany({ where: { expiresAt: { lte: now } }, select: { id: true, tempKey: true }, take: 200 });
     let deletedFiles = 0;
-
+    const UPLOAD_DIR = path.join(process.cwd(), "public", "uploads");
     for (const item of expired) {
-      const fullPath = path.join(UPLOAD_DIR, item.tempKey);
-      try {
-        await unlink(fullPath);
-        deletedFiles++;
-      } catch {
-        // file might already be gone, ignore
-      }
+      try { await unlink(path.join(UPLOAD_DIR, item.tempKey)); deletedFiles++; } catch { }
     }
-
-    const deletedRows = await prisma.submissionMedia.deleteMany({
-      where: { id: { in: expired.map((e) => e.id) } },
-    });
-
-    return NextResponse.json({
-      ok: true,
-      scanned: expired.length,
-      deletedRows: deletedRows.count,
-      deletedFiles,
-    });
-  } catch (err: any) {
-    return NextResponse.json(
-      { ok: false, error: "SERVER_ERROR", message: err?.message ?? "" },
-      { status: 500 }
-    );
-  }
+    const deletedRows = await prisma.submissionMedia.deleteMany({ where: { id: { in: expired.map(e => e.id) } } });
+    return NextResponse.json({ ok: true, scanned: expired.length, deletedRows: deletedRows.count, deletedFiles });
+  } catch (err: unknown) { return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: err instanceof Error ? err.message : "" }, { status: 500 }); }
 }

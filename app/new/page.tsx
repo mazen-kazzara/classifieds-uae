@@ -1,245 +1,622 @@
 "use client";
+import { useState, useEffect, Suspense } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
+import Link from "next/link";
+import Header from "@/components/Header";
+import Footer from "@/components/Footer";
 
-import { useState } from "react";
+interface Category { id: string; name: string; nameAr: string; slug: string; icon?: string; }
+interface Package { id: string; name: string; nameAr: string; description?: string; price: number; durationDays: number; maxImages: number; isFeatured: boolean; isPinned: boolean; includesTelegram: boolean; }
 
-export default function NewAdPage() {
-  const [phone, setPhone] = useState("971");
+const NORMAL_BASE = 10;
+const IMG_PRICE = 2.5;
+const NORMAL_MAX = 15;
+const FEATURED_PRICE = 25;
+
+function fmtAED(val: string): string {
+  const n = val.replace(/\D/g, "");
+  return n ? Number(n).toLocaleString("en-AE") : "";
+}
+
+function fieldErr(errors: Record<string, string>, field: string) {
+  if (!errors[field]) return null;
+  return <p style={{ color: "var(--danger)", fontSize: "0.75rem", marginTop: "0.25rem" }}>⚠ {errors[field]}</p>;
+}
+
+const inputBase: React.CSSProperties = {
+  width: "100%", height: 44, padding: "0 1rem",
+  backgroundColor: "var(--surface)", color: "var(--text)",
+  border: "1.5px solid var(--border)", borderRadius: "var(--radius-md)",
+  fontSize: "0.875rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box",
+};
+const inputError: React.CSSProperties = { borderColor: "var(--danger)" };
+const labelStyle: React.CSSProperties = { display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.375rem" };
+const hintStyle: React.CSSProperties = { fontSize: "0.75rem", color: "var(--text-muted)" };
+
+function NewAdForm() {
+  const sp = useSearchParams();
+  const router = useRouter();
+  const [step, setStep] = useState<"type" | "details" | "package" | "done">("type");
+  const [contentType, setContentType] = useState<"ad" | "offer" | "service">((sp.get("type") as any) || "ad");
   const [submissionId, setSubmissionId] = useState("");
-  const [language, setLanguage] = useState<"EN" | "AR">("EN");
-  const [category, setCategory] = useState("Vehicles");
-  const [text, setText] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  const [phone, setPhone] = useState("971");
+  const [title, setTitle] = useState("");
+  const [description, setDescription] = useState("");
+  const [categoryId, setCategoryId] = useState("");
+  const [adPriceRaw, setAdPriceRaw] = useState("");
+  const [isNegotiable, setIsNegotiable] = useState(false);
   const [contactPhone, setContactPhone] = useState("971");
-  const [contactEmail, setContactEmail] = useState("");
-
+  const [whatsappNumber, setWhatsappNumber] = useState("");
+  const [contactMethod, setContactMethod] = useState<"call"|"whatsapp"|"both">("call");
+  const [offerStartDate, setOfferStartDate] = useState("");
+  const [offerEndDate, setOfferEndDate] = useState("");
+  const [bookingEnabled, setBookingEnabled] = useState(false);
+  const [bookingType, setBookingType] = useState("whatsapp");
+  const [publishTarget, setPublishTarget] = useState("website");
   const [img1, setImg1] = useState<File | null>(null);
   const [img2, setImg2] = useState<File | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [packages, setPackages] = useState<Package[]>([]);
+  const [selectedPlan, setSelectedPlan] = useState("free");
 
-  const [loading, setLoading] = useState(false);
-  const [out, setOut] = useState<any>(null);
+  useEffect(() => {
+    const presetPkg = sp.get("packageId");
+    Promise.all([
+      fetch("/api/public/categories").then(r => r.json()),
+      fetch("/api/public/packages").then(r => r.json()),
+    ]).then(([cats, pkgs]) => {
+      setCategories(cats.categories || []);
+      setPackages(pkgs.packages || []);
+      if (presetPkg && pkgs.packages) {
+        const found = pkgs.packages.find((p: Package) => p.id === presetPkg);
+        if (found) setSelectedPackage(found);
+      }
+    });
+  }, [sp]);
 
-  async function start() {
-    setLoading(true);
-    setOut(null);
+
+
+  function validatePhone(val: string) {
+    const digits = val.replace(/\D/g, "");
+    if (!digits.startsWith("971") || digits.length !== 12) return "Must be a valid UAE number: 971XXXXXXXXX";
+    return "";
+  }
+
+  function validateStep1() {
+    const errs: Record<string, string> = {};
+    const e = validatePhone(phone);
+    if (e) errs.phone = e;
+    setFieldErrors(errs);
+    return !Object.keys(errs).length;
+  }
+
+  function validateStep2() {
+    const errs: Record<string, string> = {};
+    if (!title.trim() || title.trim().length < 3) errs.title = "Title must be at least 3 characters";
+    if (title.trim().length > 100) errs.title = "Title must be under 100 characters";
+    if (!description.trim() || description.trim().length < 10) errs.description = "Description must be at least 10 characters";
+    if (description.trim().length > 2000) errs.description = "Description must be under 2000 characters";
+    if (!categoryId) errs.category = "Please select a category";
+    if (!isNegotiable) {
+      if (!adPriceRaw) errs.adPrice = "Price is required unless negotiable";
+      else if (isNaN(Number(adPriceRaw.replace(/,/g,""))) || Number(adPriceRaw.replace(/,/g,"")) < 0)
+        errs.adPrice = "Enter a valid price";
+    }
+    const ce = validatePhone(contactPhone);
+    if (ce) errs.contactPhone = ce;
+    if (contactMethod === "whatsapp" || contactMethod === "both") {
+      if (!whatsappNumber) {
+        errs.whatsappNumber = "WhatsApp number is required for this contact method";
+      } else {
+        const we = validatePhone(whatsappNumber);
+        if (we) errs.whatsappNumber = we;
+      }
+    } else if (whatsappNumber) {
+      const we = validatePhone(whatsappNumber);
+      if (we) errs.whatsappNumber = we;
+    }
+    if (contentType === "offer" && !offerEndDate) errs.offerEndDate = "Offer end date is required";
+    setFieldErrors(errs);
+    return !Object.keys(errs).length;
+  }
+
+  async function startSubmission() {
+    if (!validateStep1()) return;
+    setLoading(true); setError("");
     try {
-      const res = await fetch("/api/submissions/start", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ phone }),
-      });
+      const res = await fetch("/api/submissions/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone }) });
       const data = await res.json();
-      setOut(data);
-      if (data.ok) setSubmissionId(data.submissionId);
-    } finally {
-      setLoading(false);
-    }
+      if (!data.ok) throw new Error(data.error || "Failed to start");
+      setSubmissionId(data.submissionId); setStep("package");
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "Something went wrong"); }
+    finally { setLoading(false); }
   }
 
-  async function saveLanguage() {
-    if (!submissionId) return;
-    setLoading(true);
-    setOut(null);
+  async function saveDetails() {
+    if (!validateStep2()) return;
+    setLoading(true); setError("");
     try {
-      const res = await fetch(`/api/submissions/${submissionId}/language`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ language }),
+      const adPriceNum = adPriceRaw ? Number(adPriceRaw.replace(/,/g, "")) : null;
+      await fetch(`/api/submissions/${submissionId}/language`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "EN" }) });
+      await fetch(`/api/submissions/${submissionId}/category`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ categoryId }) });
+      const textRes = await fetch(`/api/submissions/${submissionId}/text`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text: description, title, adPrice: adPriceNum, isNegotiable }),
       });
-      setOut(await res.json());
-    } finally {
-      setLoading(false);
-    }
+      const textData = await textRes.json();
+      if (!textData.ok) { if (textData.field) setFieldErrors(e => ({ ...e, [textData.field]: textData.error })); throw new Error(textData.error || "Failed"); }
+      const contactRes = await fetch(`/api/submissions/${submissionId}/contact`, {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ contactPhone, whatsappNumber: whatsappNumber || null, contactMethod, contentType, offerStartDate: offerStartDate || null, offerEndDate: offerEndDate || null, bookingEnabled, bookingType, publishTarget }),
+      });
+      if (!(await contactRes.json()).ok) throw new Error("Failed to save contact");
+      if (img1) { const f = new FormData(); f.append("file", img1); f.append("position", "1"); await fetch(`/api/submissions/${submissionId}/images`, { method: "POST", body: f }); }
+      if (img2) { const f = new FormData(); f.append("file", img2); f.append("position", "2"); await fetch(`/api/submissions/${submissionId}/images`, { method: "POST", body: f }); }
+      await createPayment();
+      return;
+    } catch (e: unknown) { setError(e instanceof Error ? e.message : "Something went wrong"); }
+    finally { setLoading(false); }
   }
 
-  async function saveCategory() {
-    if (!submissionId) return;
-    setLoading(true);
-    setOut(null);
-    try {
-      const res = await fetch(`/api/submissions/${submissionId}/category`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ category }),
-      });
-      setOut(await res.json());
-    } finally {
-      setLoading(false);
-    }
-  }
 
-  async function saveText() {
-    if (!submissionId) return;
-    setLoading(true);
-    setOut(null);
-    try {
-      const res = await fetch(`/api/submissions/${submissionId}/text`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ text }),
-      });
-      setOut(await res.json());
-    } finally {
-      setLoading(false);
-    }
-  }
+async function createPayment() {
+  setLoading(true);
+  setError("");
 
-  async function saveContact() {
-    if (!submissionId) return;
-    setLoading(true);
-    setOut(null);
-    try {
-      const res = await fetch(`/api/submissions/${submissionId}/contact`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactPhone, contactEmail }),
-      });
-      setOut(await res.json());
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  async function uploadOne(file: File, position: 1 | 2) {
-    const form = new FormData();
-    form.append("file", file);
-    form.append("position", String(position));
-
-    const res = await fetch(`/api/submissions/${submissionId}/images`, {
+  try {
+    // SAVE PACKAGE FIRST
+    const pkg = getSubmitPackage();
+    if (isFree && imgCount > 0) { setError("Free plan does not support images. Remove images or choose Normal/Featured."); setLoading(false); return; }
+    const resPkg = await fetch(`/api/submissions/${submissionId}/package`, {
       method: "POST",
-      body: form,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ packageId: pkg?.id ?? null })
     });
 
-    return res.json();
-  }
-
-  async function uploadImages() {
-    if (!submissionId) return;
-    setLoading(true);
-    setOut(null);
-    try {
-      let lastResp: any = null;
-      if (img1) lastResp = await uploadOne(img1, 1);
-      if (img2) lastResp = await uploadOne(img2, 2);
-      setOut(lastResp);
-    } finally {
-      setLoading(false);
+    if (!resPkg.ok) {
+      throw new Error("Failed to save package");
     }
-  }
 
-  async function createPayment() {
-    if (!submissionId) return;
-    setLoading(true);
-    setOut(null);
-    try {
-      const res = await fetch("/api/payments/create", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ submissionId }),
-      });
-      setOut(await res.json());
-    } finally {
-      setLoading(false);
+    // FORCE DB SYNC (critical)
+    await new Promise(r => setTimeout(r, 500));
+
+    // CREATE PAYMENT
+    const res = await fetch("/api/payments/create", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ submissionId }),
+    });
+
+    const data = await res.json();
+
+    // FREE FLOW
+    if (data.free) {
+      router.push(`/success?submissionId=${submissionId}&free=true`);
+      return;
     }
+
+    // PAID FLOW
+    if (!data.checkoutUrl) {
+      throw new Error(data.error || "No payment URL");
+    }
+
+    window.location.href = data.checkoutUrl;
+
+  } catch (e: unknown) {
+    setError(e instanceof Error ? e.message : "Payment failed");
+  } finally {
+    setLoading(false);
+  }
+}  
+
+  const STEPS: Record<string, number> = { type: 1, package: 2, details: 3, done: 4 };
+  const charCount = description.replace(/[^A-Za-z0-9\u0600-\u06FF]/g, "").length;
+  const imgCount = (img1 ? 1 : 0) + (img2 ? 1 : 0);
+  const isFree = selectedPlan === "free";
+  const isNormal = selectedPlan === "normal";
+  const isFeaturedPlan = selectedPlan === "featured";
+  const normalPkg = packages.find((p: Package) => p.name === "Normal");
+  const featuredPkg = packages.find((p: Package) => p.isFeatured);
+  const normalImgCost = imgCount * IMG_PRICE;
+  const normalTotal = Math.min(NORMAL_BASE + normalImgCost, NORMAL_MAX);
+  function getDisplayTotal() {
+    if (isFree) return 0;
+    if (isNormal) return normalTotal;
+    return FEATURED_PRICE;
+  }
+  function getSubmitPackage() {
+    if (isFree) return null;
+    if (isNormal) return normalPkg || null;
+    return featuredPkg || null;
   }
 
   return (
-    <main style={{ padding: 24, maxWidth: 720 }}>
-      <h1>New Ad (Test Flow)</h1>
+    <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }}>
+      <Header />
+      <main className="max-w-2xl mx-auto px-4 py-8">
+        {/* Progress */}
+        <div className="flex items-center gap-2 mb-8">
+          {(["type", "package", "details", "done"] as const).map((stepKey, i) => {
+            const label = ["Type", "Plan", "Details", "Publish"][i];
+            const isCompleted = STEPS[step] > i + 1;
+            const isActive = STEPS[step] === i + 1;
+            const isClickable = isCompleted && stepKey !== "done";
+            return (
+              <div key={label} className="flex items-center gap-1.5 flex-1">
+                <div
+                  onClick={() => { if (isClickable) setStep(stepKey); }}
+                  style={{
+                    width: 30, height: 30, borderRadius: "50%", display: "flex", alignItems: "center", justifyContent: "center",
+                    fontSize: "0.8125rem", fontWeight: 700, flexShrink: 0,
+                    backgroundColor: isCompleted || isActive ? "var(--primary)" : "var(--surface-2)",
+                    color: isCompleted || isActive ? "#fff" : "var(--text-muted)",
+                    border: `1.5px solid ${isCompleted || isActive ? "var(--primary)" : "var(--border)"}`,
+                    cursor: isClickable ? "pointer" : "default",
+                    transition: "transform 0.15s",
+                  }}
+                  title={isClickable ? `Go back to ${label}` : undefined}
+                  onMouseEnter={e => { if (isClickable) (e.currentTarget as HTMLElement).style.transform = "scale(1.15)"; }}
+                  onMouseLeave={e => { (e.currentTarget as HTMLElement).style.transform = "scale(1)"; }}
+                >
+                  {isCompleted ? "✓" : i + 1}
+                </div>
+                <span style={{ color: isActive ? "var(--primary)" : "var(--text-muted)", fontSize: "0.75rem", fontWeight: 500 }} className="hidden sm:block">{label}</span>
+                {i < 3 && <div style={{ flex: 1, height: 1.5, backgroundColor: "var(--border)" }} />}
+              </div>
+            );
+          })}
+        </div>
 
-      <div style={{ marginTop: 16 }}>
-        <input
-          value={phone}
-          onChange={(e) => setPhone(e.target.value)}
-          placeholder="Phone (must start 971)"
-        />
-        <button onClick={start} disabled={loading}>
-          1) Start
-        </button>
-      </div>
+        {error && (
+          <div style={{ backgroundColor: "color-mix(in srgb, var(--danger) 10%, var(--surface))", border: "1.5px solid var(--danger)", borderRadius: "var(--radius-md)", padding: "0.875rem 1rem", marginBottom: "1rem", color: "var(--danger)", fontSize: "0.875rem" }}>
+            ❌ {error}
+          </div>
+        )}
 
-      <div style={{ marginTop: 16 }}>
-        <input
-          value={submissionId}
-          readOnly
-          style={{ width: 500 }}
-          placeholder="Submission ID"
-        />
-      </div>
+        {/* STEP 1 */}
+        {step === "type" && (
+          <div style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "1.75rem" }} className="shadow-card">
+            <h2 style={{ color: "var(--text)", fontWeight: 700, fontSize: "1.25rem", marginBottom: "1.25rem" }}>What do you want to post?</h2>
+            <div className="grid grid-cols-3 gap-3 mb-6">
+              {[{ id: "ad", label: "Ad", icon: "📢", desc: "Sell products" }, { id: "offer", label: "Offer", icon: "🔥", desc: "Deals & promos" }, { id: "service", label: "Service", icon: "🛠️", desc: "Professional services" }].map((t) => (
+                <button key={t.id} onClick={() => setContentType(t.id as any)}
+                  style={{ padding: "1rem 0.75rem", borderRadius: "var(--radius-md)", border: `2px solid ${contentType === t.id ? "var(--primary)" : "var(--border)"}`, backgroundColor: contentType === t.id ? "color-mix(in srgb, var(--primary) 10%, var(--surface))" : "var(--surface)", textAlign: "left", cursor: "pointer", transition: "all 0.15s" }}>
+                  <div style={{ fontSize: "1.75rem", marginBottom: "0.375rem" }}>{t.icon}</div>
+                  <p style={{ fontWeight: 700, color: "var(--text)", fontSize: "0.875rem" }}>{t.label}</p>
+                  <p style={{ color: "var(--text-muted)", fontSize: "0.7rem", marginTop: "0.125rem" }}>{t.desc}</p>
+                </button>
+              ))}
+            </div>
 
-      <div style={{ marginTop: 16 }}>
-        <select
-          value={language}
-          onChange={(e) => setLanguage(e.target.value as any)}
-        >
-          <option value="EN">EN</option>
-          <option value="AR">AR</option>
-        </select>
-        <button onClick={saveLanguage} disabled={!submissionId}>
-          2) Save Language
-        </button>
-      </div>
+            <div style={{ marginBottom: "1.25rem" }}>
+              <label style={labelStyle}>Your UAE Phone Number <span style={{ color: "var(--danger)" }}>*</span></label>
+              <input style={{ ...inputBase, ...(fieldErrors.phone ? inputError : {}) }} type="tel" value={phone}
+                onChange={(e) => { setPhone(e.target.value); setFieldErrors(fe => ({ ...fe, phone: "" })); }}
+                placeholder="971501234567"
+                onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
+                onBlur={(e) => (e.target.style.borderColor = fieldErrors.phone ? "var(--danger)" : "var(--border)")} />
+              {fieldErr(fieldErrors, "phone")}
+              <p style={{ ...hintStyle, marginTop: "0.25rem" }}>Format: 971XXXXXXXXX (12 digits)</p>
+            </div>
 
-      <div style={{ marginTop: 16 }}>
-        <select
-          value={category}
-          onChange={(e) => setCategory(e.target.value)}
-        >
-          <option value="Vehicles">Vehicles</option>
-          <option value="Real Estate">Real Estate</option>
-          <option value="Electronics">Electronics</option>
-        </select>
-        <button onClick={saveCategory} disabled={!submissionId}>
-          3) Save Category
-        </button>
-      </div>
+            <button onClick={startSubmission} disabled={loading} className="btn-primary w-full" style={{ height: 48, fontSize: "0.9375rem", width: "100%", justifyContent: "center" }}>
+              {loading ? "Starting…" : "Continue →"}
+            </button>
+          </div>
+        )}
 
-      <div style={{ marginTop: 16 }}>
-        <textarea
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="Ad text"
-          rows={4}
-          style={{ width: 400 }}
-        />
-        <br />
-        <button onClick={saveText} disabled={!submissionId}>
-          4) Save Text
-        </button>
-      </div>
+        {/* STEP 2 */}
+        {step === "details" && (
+          <div style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "1.75rem" }} className="shadow-card space-y-5">
+            <h2 style={{ color: "var(--text)", fontWeight: 700, fontSize: "1.25rem" }}>Ad Details</h2>
 
-      <div style={{ marginTop: 16 }}>
-        <input
-          value={contactPhone}
-          onChange={(e) => setContactPhone(e.target.value)}
-          placeholder="Contact Phone"
-        />
-        <input
-          value={contactEmail}
-          onChange={(e) => setContactEmail(e.target.value)}
-          placeholder="Contact Email"
-        />
-        <button onClick={saveContact} disabled={!submissionId}>
-          5) Save Contact
-        </button>
-      </div>
+            {/* Title */}
+            <div>
+              <label style={labelStyle}>Title <span style={{ color: "var(--danger)" }}>*</span></label>
+              <input style={{ ...inputBase, ...(fieldErrors.title ? inputError : {}) }} type="text" value={title}
+                onChange={(e) => { setTitle(e.target.value); setFieldErrors(fe => ({ ...fe, title: "" })); }}
+                placeholder="e.g. Toyota Corolla 2020 for sale" maxLength={300}
+                onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
+                onBlur={(e) => (e.target.style.borderColor = fieldErrors.title ? "var(--danger)" : "var(--border)")} />
+              {fieldErr(fieldErrors, "title")}
+            </div>
 
-      <div style={{ marginTop: 16 }}>
-        <input type="file" onChange={(e) => setImg1(e.target.files?.[0] ?? null)} />
-        <input type="file" onChange={(e) => setImg2(e.target.files?.[0] ?? null)} />
-        <button onClick={uploadImages} disabled={!submissionId}>
-          6) Upload Images
-        </button>
-      </div>
+            {/* Description */}
+            <div>
+              <label style={labelStyle}>
+                Description <span style={{ color: "var(--danger)" }}>*</span>
+                <span style={{ ...hintStyle, marginLeft: "0.5rem", fontWeight: 400 }}>(10 AED per 100 chars)</span>
+              </label>
+              <textarea style={{ ...inputBase, height: "auto", padding: "0.75rem 1rem", resize: "none", ...(fieldErrors.description ? inputError : {}) }}
+                value={description}
+                maxLength={300}
+                onChange={(e) => { setDescription(e.target.value); setFieldErrors(fe => ({ ...fe, description: "" })); }}
+                placeholder="Describe your ad in detail…" rows={5}
+                onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
+                onBlur={(e) => (e.target.style.borderColor = fieldErrors.description ? "var(--danger)" : "var(--border)")} />
+              <div style={{ display: "flex", justifyContent: "flex-end", marginTop: "0.25rem" }}>
+                <span style={{ fontSize: "0.72rem", fontWeight: description.length >= 270 ? 600 : 400, color: description.length >= 300 ? "var(--danger)" : description.length >= 270 ? "#f59e0b" : "var(--text-muted)" }}>
+                  {description.length} / 300
+                </span>
+              </div>
+              <p style={{ ...hintStyle, marginTop: "0.25rem" }}>{charCount} chars</p>
+              {fieldErr(fieldErrors, "description")}
+            </div>
 
-      <div style={{ marginTop: 16 }}>
-        <button onClick={createPayment} disabled={!submissionId}>
-          7) Create Payment
-        </button>
-      </div>
+            {/* Category */}
+            <div>
+              <label style={labelStyle}>Category <span style={{ color: "var(--danger)" }}>*</span></label>
+              <select style={{ ...inputBase, ...(fieldErrors.category ? inputError : {}), appearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.75rem center", paddingRight: "2.5rem" }}
+                value={categoryId}
+                onChange={(e) => { setCategoryId(e.target.value); setFieldErrors(fe => ({ ...fe, category: "" })); }}>
+                <option value="">Select category</option>
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+              </select>
+              {fieldErr(fieldErrors, "category")}
+            </div>
 
-      <div style={{ marginTop: 24 }}>
-        <pre>{JSON.stringify(out, null, 2)}</pre>
-      </div>
-    </main>
+            {/* Price */}
+            <div>
+              <label style={labelStyle}>Price (AED) <span style={hintStyle}> — optional</span></label>
+              <div style={{ display: "flex", gap: "0.75rem", alignItems: "center" }}>
+                <input
+                  style={{ ...inputBase, flex: 1, width: "auto" }}
+                  type="text"
+                  inputMode="numeric"
+                  value={adPriceRaw}
+                  onChange={(e) => {
+                    const raw = e.target.value.replace(/,/g, "");
+                    if (/^\d*$/.test(raw)) setAdPriceRaw(raw ? Number(raw).toLocaleString("en-AE") : "");
+                    setFieldErrors(fe => ({ ...fe, adPrice: "" }));
+                  }}
+                  placeholder="e.g. 5,000"
+                  onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
+                  onBlur={(e) => (e.target.style.borderColor = fieldErrors.adPrice ? "var(--danger)" : "var(--border)")} />
+                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", whiteSpace: "nowrap", userSelect: "none" }}>
+                  <input type="checkbox" checked={isNegotiable} onChange={(e) => setIsNegotiable(e.target.checked)} style={{ width: 16, height: 16, accentColor: "var(--primary)" }} />
+                  <span style={{ fontSize: "0.875rem", color: "var(--text)", fontWeight: 500 }}>Negotiable</span>
+                </label>
+              </div>
+              {fieldErr(fieldErrors, "adPrice")}
+              {isNegotiable && <p style={{ ...hintStyle, marginTop: "0.25rem" }}>Price will show as &quot;Negotiable&quot; or both price + negotiable if price is set.</p>}
+            </div>
+
+            {/* Offer dates */}
+            {contentType === "offer" && (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                <div>
+                  <label style={labelStyle}>Offer Start</label>
+                  <input style={inputBase} type="date" value={offerStartDate} onChange={(e) => setOfferStartDate(e.target.value)}
+                    onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
+                    onBlur={(e) => (e.target.style.borderColor = "var(--border)")} />
+                </div>
+                <div>
+                  <label style={labelStyle}>Offer End <span style={{ color: "var(--danger)" }}>*</span></label>
+                  <input style={{ ...inputBase, ...(fieldErrors.offerEndDate ? inputError : {}) }} type="date" value={offerEndDate}
+                    onChange={(e) => { setOfferEndDate(e.target.value); setFieldErrors(fe => ({ ...fe, offerEndDate: "" })); }}
+                    onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
+                    onBlur={(e) => (e.target.style.borderColor = fieldErrors.offerEndDate ? "var(--danger)" : "var(--border)")} />
+                  {fieldErr(fieldErrors, "offerEndDate")}
+                </div>
+              </div>
+            )}
+
+            {/* Contact Phone */}
+            <div>
+              <label style={labelStyle}>Contact Phone <span style={{ color: "var(--danger)" }}>*</span></label>
+              <input style={{ ...inputBase, ...(fieldErrors.contactPhone ? inputError : {}) }} type="tel" value={contactPhone}
+                onChange={(e) => { setContactPhone(e.target.value); setFieldErrors(fe => ({ ...fe, contactPhone: "" })); }}
+                placeholder="971501234567"
+                onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
+                onBlur={(e) => (e.target.style.borderColor = fieldErrors.contactPhone ? "var(--danger)" : "var(--border)")} />
+              {fieldErr(fieldErrors, "contactPhone")}
+            </div>
+
+            {/* WhatsApp */}
+            <div>
+              <label style={labelStyle}>WhatsApp Number {(contactMethod === "whatsapp" || contactMethod === "both") ? <span style={{ color: "var(--danger)" }}>*</span> : <span style={hintStyle}> — optional</span>}</label>
+              <input style={{ ...inputBase, ...(fieldErrors.whatsappNumber ? inputError : {}) }} type="tel" value={whatsappNumber}
+                onChange={(e) => { setWhatsappNumber(e.target.value); setFieldErrors(fe => ({ ...fe, whatsappNumber: "" })); }}
+                placeholder="971501234567 (leave blank if same as contact)"
+                onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
+                onBlur={(e) => (e.target.style.borderColor = fieldErrors.whatsappNumber ? "var(--danger)" : "var(--border)")} />
+              {fieldErr(fieldErrors, "whatsappNumber")}
+            </div>
+
+            <div>
+              <label style={labelStyle}>Contact Method</label>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                {(["call", "whatsapp", "both"] as const).map((m) => (
+                  <button key={m} type="button" onClick={() => { setContactMethod(m); if ((m === "whatsapp" || m === "both") && !whatsappNumber) setWhatsappNumber(contactPhone); }}
+                    style={{ flex: 1, height: 44, borderRadius: "var(--radius-md)", border: `1.5px solid ${contactMethod === m ? "var(--primary)" : "var(--border)"}`, backgroundColor: contactMethod === m ? "var(--primary)" : "var(--surface)", color: contactMethod === m ? "#fff" : "var(--text-muted)", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}>
+                    {m === "call" ? "📞 Call Only" : m === "whatsapp" ? "💬 WhatsApp Only" : "📞 + 💬 Both"}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Booking (service) */}
+            {contentType === "service" && (
+              <div style={{ backgroundColor: "color-mix(in srgb, var(--primary) 8%, var(--surface))", border: "1.5px solid color-mix(in srgb, var(--primary) 20%, var(--border))", borderRadius: "var(--radius-md)", padding: "1rem" }}>
+                <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", marginBottom: "0.75rem" }}>
+                  <input type="checkbox" checked={bookingEnabled} onChange={(e) => setBookingEnabled(e.target.checked)} style={{ width: 16, height: 16, accentColor: "var(--primary)" }} />
+                  <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--text)" }}>Enable Booking Button</span>
+                </label>
+                {bookingEnabled && (
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    {["whatsapp", "call", "form"].map((t) => (
+                      <button key={t} onClick={() => setBookingType(t)}
+                        style={{ padding: "0.375rem 0.875rem", borderRadius: "var(--radius-md)", border: `1.5px solid ${bookingType === t ? "var(--primary)" : "var(--border)"}`, backgroundColor: bookingType === t ? "var(--primary)" : "var(--surface)", color: bookingType === t ? "#fff" : "var(--text-muted)", fontSize: "0.8125rem", fontWeight: 500, cursor: "pointer" }}>
+                        {t === "whatsapp" ? "WhatsApp" : t === "call" ? "Call" : "Form"}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Images — only for paid plans */}
+            {!isFree && <div>
+              <label style={labelStyle}>Images <span style={hintStyle}> — 2.5 AED each · max 2</span></label>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
+                {([{ file: img1, setFile: setImg1, label: "Image 1" }, { file: img2, setFile: setImg2, label: "Image 2" }] as const).map(({ file, setFile, label }) => (
+                  <label key={label} style={{ cursor: "pointer" }}>
+                    <div style={{ border: `2px dashed ${file ? "var(--primary)" : "var(--border)"}`, borderRadius: "var(--radius-md)", padding: "1rem", textAlign: "center", backgroundColor: file ? "color-mix(in srgb, var(--primary) 8%, var(--surface))" : "var(--surface-2)", transition: "all 0.15s" }}>
+                      {file ? (
+                        <div>
+                          <p style={{ color: "var(--primary)", fontSize: "0.875rem", fontWeight: 600 }}>✓ {label}</p>
+                          <p style={{ color: "var(--text-muted)", fontSize: "0.7rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</p>
+                          <button onClick={(e) => { e.preventDefault(); setFile(null); }} style={{ color: "var(--danger)", fontSize: "0.75rem", marginTop: "0.25rem", background: "none", border: "none", cursor: "pointer" }}>Remove</button>
+                        </div>
+                      ) : (
+                        <div>
+                          <p style={{ fontSize: "1.5rem", marginBottom: "0.25rem" }}>📷</p>
+                          <p style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Add {label}</p>
+                          <p style={{ color: "var(--text-muted)", fontSize: "0.7rem", marginTop: "0.125rem" }}>+2.5 AED</p>
+                        </div>
+                      )}
+                      <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>}
+
+            {/* Publish target */}
+            <div>
+              <label style={labelStyle}>Publish To</label>
+              <p style={{ ...hintStyle, marginBottom: "0.75rem" }}>Your ad will be published on the following platforms:</p>
+
+              {/* Active channels */}
+              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
+                {[
+                  { val: "website", label: "Website" },
+                  { val: "website+telegram", label: "Website + Telegram" },
+                ].map((t) => (
+                  <button key={t.val} onClick={() => setPublishTarget(t.val)}
+                    style={{ flex: 1, height: 44, padding: "0 0.75rem", borderRadius: "var(--radius-md)", border: `1.5px solid ${publishTarget === t.val ? "var(--primary)" : "var(--border)"}`, backgroundColor: publishTarget === t.val ? "color-mix(in srgb, var(--primary) 10%, var(--surface))" : "var(--surface)", color: publishTarget === t.val ? "var(--primary)" : "var(--text-muted)", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Coming soon channels */}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem" }}>
+                {["WhatsApp", "Facebook", "Instagram"].map((label) => (
+                  <div key={label} style={{ height: 40, borderRadius: "var(--radius-md)", border: "1.5px dashed var(--border)", backgroundColor: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.375rem", opacity: 0.55, cursor: "not-allowed" }}>
+                    <span style={{ color: "var(--text-muted)", fontSize: "0.75rem", fontWeight: 500 }}>{label}</span>
+                    <span style={{ fontSize: "0.55rem", fontWeight: 700, backgroundColor: "var(--border)", color: "var(--text-muted)", padding: "0.1rem 0.35rem", borderRadius: 999, textTransform: "uppercase", letterSpacing: "0.04em" }}>Soon</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <button onClick={saveDetails} disabled={loading} className="btn-primary w-full" style={{ height: 48, fontSize: "0.9375rem", width: "100%", justifyContent: "center" }}>
+              {loading ? "Processing…" : isFree ? "Publish Ad Free →" : `Pay ${getDisplayTotal()} AED & Publish →`}
+            </button>
+          </div>
+        )}
+
+        {/* STEP 3: Package */}
+        {step === "package" && (
+          <div style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "1.75rem" }}>
+            <h2 style={{ color: "var(--text)", fontWeight: 700, fontSize: "1.25rem", marginBottom: "0.375rem" }}>Choose a Plan</h2>
+            <p style={{ ...hintStyle, marginBottom: "1.5rem" }}>Select the plan that works best for you</p>
+
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem", marginBottom: "1.5rem" }}>
+              {/* FREE */}
+              <button onClick={() => { setSelectedPlan("free"); setSelectedPackage(null); }}
+                style={{ padding: "1rem 0.75rem", borderRadius: "var(--radius-md)", border: `2px solid ${isFree ? "var(--primary)" : "var(--border)"}`, backgroundColor: isFree ? "color-mix(in srgb, var(--primary) 8%, var(--surface))" : "var(--surface)", textAlign: "left", cursor: "pointer", transition: "all 0.15s" }}>
+                <p style={{ fontWeight: 700, color: "var(--text)", fontSize: "0.9375rem" }}>Free</p>
+                <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--primary)", margin: "0.375rem 0 0.625rem" }}>0 <span style={{ fontSize: "0.8125rem", fontWeight: 600 }}>AED</span></p>
+                <ul style={{ listStyle: "none", padding: 0, margin: 0, color: "var(--text-muted)", fontSize: "0.73rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                  <li>✓ 3 days</li>
+                  <li>✓ Text only</li>
+                  <li style={{ color: "var(--danger)" }}>✗ No images</li>
+                </ul>
+              </button>
+              {/* NORMAL */}
+              <button onClick={() => { setSelectedPlan("normal"); setSelectedPackage(normalPkg || null); }}
+                style={{ padding: "1rem 0.75rem", borderRadius: "var(--radius-md)", border: `2px solid ${isNormal ? "var(--primary)" : "var(--border)"}`, backgroundColor: isNormal ? "color-mix(in srgb, var(--primary) 8%, var(--surface))" : "var(--surface)", textAlign: "left", cursor: "pointer", transition: "all 0.15s" }}>
+                <p style={{ fontWeight: 700, color: "var(--text)", fontSize: "0.9375rem" }}>Normal</p>
+                <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--primary)", margin: "0.375rem 0 0.625rem" }}>{normalTotal} <span style={{ fontSize: "0.8125rem", fontWeight: 600 }}>AED</span></p>
+                <ul style={{ listStyle: "none", padding: 0, margin: 0, color: "var(--text-muted)", fontSize: "0.73rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                  <li>✓ 7 days</li>
+                  <li>✓ 10 AED base</li>
+                  <li>✓ +2.5/image</li>
+                  <li>✓ Max 15 AED</li>
+                </ul>
+              </button>
+              {/* FEATURED */}
+              <button onClick={() => { setSelectedPlan("featured"); setSelectedPackage(featuredPkg || null); }}
+                style={{ padding: "1rem 0.75rem", borderRadius: "var(--radius-md)", border: `2px solid ${isFeaturedPlan ? "var(--primary)" : "var(--border)"}`, backgroundColor: isFeaturedPlan ? "color-mix(in srgb, var(--primary) 8%, var(--surface))" : "var(--surface)", textAlign: "left", cursor: "pointer", transition: "all 0.15s", position: "relative" }}>
+                <span style={{ position: "absolute", top: "0.5rem", right: "0.5rem", fontSize: "0.6rem", fontWeight: 700, backgroundColor: "var(--primary)", color: "#fff", padding: "0.1rem 0.35rem", borderRadius: 999 }}>Best</span>
+                <p style={{ fontWeight: 700, color: "var(--text)", fontSize: "0.9375rem" }}>Featured</p>
+                <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--primary)", margin: "0.375rem 0 0.625rem" }}>{FEATURED_PRICE} <span style={{ fontSize: "0.8125rem", fontWeight: 600 }}>AED</span></p>
+                <ul style={{ listStyle: "none", padding: 0, margin: 0, color: "var(--text-muted)", fontSize: "0.73rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                  <li>✓ 14 days</li>
+                  <li>✓ Pinned top</li>
+                  <li>✓ Featured badge</li>
+                  <li>✓ All-inclusive</li>
+                </ul>
+              </button>
+            </div>
+
+            {/* Price Summary */}
+            <div style={{ backgroundColor: "var(--surface-2)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-md)", padding: "1rem", marginBottom: "1.25rem" }}>
+              <p style={{ fontWeight: 600, color: "var(--text)", marginBottom: "0.75rem", fontSize: "0.875rem" }}>Price Summary</p>
+              <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem", fontSize: "0.875rem" }}>
+                {isFree && (
+                  <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-muted)" }}>
+                    <span>Free plan — text only, 3 days</span>
+                    <span style={{ color: "var(--primary)", fontWeight: 700 }}>0 AED</span>
+                  </div>
+                )}
+                {isNormal && (
+                  <>
+                    <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-muted)" }}>
+                      <span>Base (text)</span><span>10 AED</span>
+                    </div>
+                    <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-muted)" }}>
+                      <span>Images ({imgCount} × 2.5 AED)</span><span>{normalImgCost} AED</span>
+                    </div>
+                    {(NORMAL_BASE + normalImgCost) > NORMAL_MAX && (
+                      <div style={{ display: "flex", justifyContent: "space-between", color: "var(--primary)", fontSize: "0.75rem" }}>
+                        <span>Cap applied (max 15 AED)</span><span>−{(NORMAL_BASE + normalImgCost) - NORMAL_MAX} AED</span>
+                      </div>
+                    )}
+                  </>
+                )}
+                {isFeaturedPlan && (
+                  <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-muted)" }}>
+                    <span>Featured — all-inclusive, 14 days</span><span>25 AED</span>
+                  </div>
+                )}
+                <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, color: "var(--text)", fontSize: "1rem", paddingTop: "0.5rem", borderTop: "1.5px solid var(--border)", marginTop: "0.25rem" }}>
+                  <span>Total</span>
+                  <span style={{ color: "var(--primary)" }}>{getDisplayTotal() === 0 ? "Free" : `${getDisplayTotal()} AED`}</span>
+                </div>
+              </div>
+            </div>
+
+            <button onClick={() => setStep("details")} className="btn-primary w-full" style={{ height: 52, fontSize: "1rem", width: "100%", justifyContent: "center" }}>
+              Continue to Details →
+            </button>
+          </div>
+        )}
+      </main>
+      <Footer />
+    </div>
   );
+}
+
+export default function NewAdPage() {
+  return <Suspense fallback={<div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>Loading…</div>}><NewAdForm /></Suspense>;
 }

@@ -1,160 +1,40 @@
 import { NextResponse } from "next/server";
-import { PrismaClient } from "@prisma/client";
+import { prisma } from "@/lib/prisma";
 import type { NextRequest } from "next/server";
 import { forbiddenWords } from "@/lib/forbidden-words";
 import { logAudit } from "@/lib/audit";
 
-const prisma = new PrismaClient();
+function containsEmoji(text: string) { return /[\u{1F300}-\u{1FAFF}]/u.test(text); }
+function containsForbidden(text: string) { const l = text.toLowerCase(); return forbiddenWords.some(w => l.includes(w)); }
 
-function containsEmoji(text: string) {
-  return /[\p{Emoji_Presentation}\p{Extended_Pictographic}]/gu.test(text);
-}
-
-function removeArabicDiacritics(text: string) {
-  return text.replace(/[\u064B-\u065F]/g, "");
-}
-
-function containsForbiddenContent(text: string) {
-  const lower = text.toLowerCase();
-  return forbiddenWords.some(word => lower.includes(word));
-}
-
-function calculatePrice(language: string, text: string) {
-  let processedText = text;
-
-  if (language === "AR") {
-    processedText = removeArabicDiacritics(text);
-    return Math.ceil(processedText.length / 70) * 10;
-  }
-
-  if (language === "EN") {
-    return Math.ceil(text.length / 140) * 10;
-  }
-
-  return 0;
-}
-
-export async function POST(
-  req: NextRequest,
-  context: { params: Promise<{ id: string }> }
-) {
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
     const body = await req.json();
     const text = String(body?.text ?? "").trim();
-
-    const ip =
-      req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      "unknown";
-
+    const title = String(body?.title ?? "").trim();
+    const adPrice = body?.adPrice !== undefined ? parseInt(body.adPrice) : null;
+    const isNegotiable = Boolean(body?.isNegotiable);
+    const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "unknown";
     const userAgent = req.headers.get("user-agent") || null;
 
-    if (!text || text.length < 5) {
-      return NextResponse.json(
-        { ok: false, error: "TEXT_TOO_SHORT" },
-        { status: 400 }
-      );
-    }
+    if (!text || text.length < 5) return NextResponse.json({ ok: false, error: "TEXT_TOO_SHORT", field: "description" }, { status: 400 });
+    if (text.length > 300) return NextResponse.json({ ok: false, error: "TEXT_TOO_LONG", message: "Description cannot exceed 100 characters.", field: "description" }, { status: 400 });
+    if (containsEmoji(text)) return NextResponse.json({ ok: false, error: "EMOJI_NOT_ALLOWED", field: "description" }, { status: 400 });
+    if (containsForbidden(text)) return NextResponse.json({ ok: false, error: "FORBIDDEN_CONTENT", field: "description" }, { status: 400 });
 
-    if (containsEmoji(text)) {
-      return NextResponse.json(
-        { ok: false, error: "EMOJI_NOT_ALLOWED" },
-        { status: 400 }
-      );
-    }
+    const s = await prisma.adSubmission.findUnique({ where: { id } });
+    if (!s) return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 });
+    if (s.status !== "DRAFT") return NextResponse.json({ ok: false, error: "CANNOT_EDIT" }, { status: 400 });
 
-    if (containsForbiddenContent(text)) {
-      return NextResponse.json(
-        { ok: false, error: "FORBIDDEN_CONTENT" },
-        { status: 400 }
-      );
-    }
-
-    const submission = await prisma.adSubmission.findUnique({
-      where: { id },
-    });
-
-    if (!submission) {
-      return NextResponse.json(
-        { ok: false, error: "NOT_FOUND" },
-        { status: 404 }
-      );
-    }
-
-    if (submission.status !== "DRAFT") {
-      return NextResponse.json(
-        { ok: false, error: "CANNOT_EDIT_AFTER_PAYMENT_STARTED" },
-        { status: 400 }
-      );
-    }
-
-    if (!submission.language) {
-      return NextResponse.json(
-        { ok: false, error: "LANGUAGE_REQUIRED_FIRST" },
-        { status: 400 }
-      );
-    }
-
-    const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000);
-
-    const duplicate = await prisma.adSubmission.findFirst({
-      where: {
-        phone: submission.phone,
-        text,
-        createdAt: { gte: tenMinutesAgo },
-        NOT: { id },
-      },
-    });
-
-    if (duplicate) {
-      return NextResponse.json(
-        { ok: false, error: "DUPLICATE_SUBMISSION_10_MIN" },
-        { status: 409 }
-      );
-    }
-
-    const priceText = calculatePrice(submission.language, text);
-
+    const priceText = 0; // Text cost is included in package price
     const updated = await prisma.adSubmission.update({
       where: { id },
-      data: {
-        text,
-        priceText,
-        priceTotal: priceText,
-      },
+      data: { text, title: title || null, priceText, priceTotal: priceText, adPrice: adPrice ?? null, isNegotiable },
     });
-
-    await logAudit({
-      actorType: "USER",
-      actorId: submission.phone,
-      ipAddress: ip,
-      userAgent,
-      action: "TEXT_UPDATED",
-      entity: "AdSubmission",
-      entityId: submission.id,
-      oldValue: {
-        text: submission.text,
-        priceText: submission.priceText,
-      },
-      newValue: {
-        text: updated.text,
-        priceText: updated.priceText,
-        priceTotal: updated.priceTotal,
-      },
-    });
-
-    return NextResponse.json({
-      ok: true,
-      submissionId: updated.id,
-      textLength: text.length,
-      priceText: updated.priceText,
-      priceTotal: updated.priceTotal,
-      status: updated.status,
-    });
-  } catch (err: any) {
-    return NextResponse.json(
-      { ok: false, error: "SERVER_ERROR", message: err?.message ?? "" },
-      { status: 500 }
-    );
+    await logAudit({ actorType: "USER", actorId: s.phone, ipAddress: ip, userAgent, action: "TEXT_UPDATED", entity: "AdSubmission", entityId: id });
+    return NextResponse.json({ ok: true, priceText: updated.priceText, priceTotal: updated.priceTotal });
+  } catch (err: unknown) {
+    return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: err instanceof Error ? err.message : "" }, { status: 500 });
   }
 }
