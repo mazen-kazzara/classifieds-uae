@@ -1,45 +1,46 @@
 "use client";
 import { useEffect, useState } from "react";
+import { useAdminLocale } from "../useAdminLocale";
+
+const thStyle: React.CSSProperties = { padding: "0.75rem", fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", textAlign: "start", borderBottom: "1.5px solid var(--border)" };
+const tdStyle: React.CSSProperties = { padding: "0.75rem", fontSize: "0.8125rem", color: "var(--text)", borderBottom: "1px solid var(--border)" };
 
 export default function AuditPage() {
-  const [logs, setLogs] = useState<Array<{id:string;action:string;entity:string;actor:string;ipAddress?:string;createdAt:string;payload?:Record<string,unknown>}>>([]);
-  const [expanded, setExpanded] = useState<string|null>(null);
+  const { isAr, t } = useAdminLocale();
+  const [logs, setLogs] = useState<Array<{ id: string; action: string; entity: string; actor: string; ipAddress?: string; createdAt: string; payload?: Record<string, unknown> }>>([]);
+  const [expanded, setExpanded] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetch("/api/admin/audit").then(r=>r.json()).then(d => { if (d.ok) setLogs(d.logs); });
-  }, []);
+  useEffect(() => { fetch("/api/admin/audit").then(r => r.json()).then(d => { if (d.ok) setLogs(d.logs); }); }, []);
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-extrabold text-gray-900 mb-6">Audit Log</h1>
-      <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-gray-50 border-b">
-            <tr>
-              <th className="text-left p-3 font-semibold text-gray-600">Action</th>
-              <th className="text-left p-3 font-semibold text-gray-600">Entity</th>
-              <th className="text-left p-3 font-semibold text-gray-600">Actor</th>
-              <th className="text-left p-3 font-semibold text-gray-600">IP</th>
-              <th className="text-left p-3 font-semibold text-gray-600">Time</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y">
-            {logs.map((log) => (
-              <>
-                <tr key={log.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setExpanded(expanded===log.id ? null : log.id)}>
-                  <td className="p-3 font-medium text-gray-900">{log.action}</td>
-                  <td className="p-3 text-gray-600">{log.entity}</td>
-                  <td className="p-3 text-gray-600">{(log.payload as Record<string,unknown>)?.actorId as string || log.actor}</td>
-                  <td className="p-3 text-gray-400 text-xs">{log.ipAddress?.replace("::ffff:","") || "-"}</td>
-                  <td className="p-3 text-gray-400 text-xs">{new Date(log.createdAt).toLocaleString("en-AE")}</td>
+    <div>
+      <h1 style={{ color: "var(--text)", fontWeight: 800, fontSize: "1.5rem", marginBottom: "1.25rem" }}>{t("Audit Log", "سجل العمليات")}</h1>
+      <div style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+            <thead>
+              <tr style={{ backgroundColor: "var(--surface-2)" }}>
+                <th style={thStyle}>{t("Action", "الإجراء")}</th>
+                <th style={thStyle}>{t("Entity", "الكيان")}</th>
+                <th style={thStyle}>{t("Actor", "المنفّذ")}</th>
+                <th style={thStyle}>{t("IP", "العنوان")}</th>
+                <th style={thStyle}>{t("Time", "الوقت")}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {logs.map(log => (
+                <tr key={log.id} onClick={() => setExpanded(expanded === log.id ? null : log.id)} style={{ cursor: "pointer", transition: "background 0.1s" }}
+                  onMouseEnter={e => (e.currentTarget.style.backgroundColor = "var(--surface-2)")} onMouseLeave={e => (e.currentTarget.style.backgroundColor = "transparent")}>
+                  <td style={{ ...tdStyle, fontWeight: 600 }}>{log.action}</td>
+                  <td style={tdStyle}>{log.entity}</td>
+                  <td style={tdStyle}>{(log.payload as Record<string, unknown>)?.actorId as string || log.actor}</td>
+                  <td style={{ ...tdStyle, fontSize: "0.7rem", color: "var(--text-muted)" }}>{log.ipAddress?.replace("::ffff:", "") || "-"}</td>
+                  <td style={{ ...tdStyle, fontSize: "0.7rem", color: "var(--text-muted)" }}>{new Date(log.createdAt).toLocaleString(isAr ? "ar-AE" : "en-AE")}</td>
                 </tr>
-                {expanded===log.id && (
-                  <tr key={`${log.id}-expanded`}><td colSpan={5} className="p-3 bg-gray-50"><pre className="text-xs text-gray-600 overflow-auto">{JSON.stringify(log.payload, null, 2)}</pre></td></tr>
-                )}
-              </>
-            ))}
-          </tbody>
-        </table>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );

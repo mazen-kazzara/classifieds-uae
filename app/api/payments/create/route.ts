@@ -3,6 +3,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
+import { publishToSocial } from "@/lib/social-publisher";
 
 export async function POST(req: NextRequest) {
   try {
@@ -44,11 +45,13 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // FREE AD
+    // FREE AD (no package OR package with price 0)
     // =========================
-    if (!hasPaidPackage) {
+    if (!hasPaidPackage || amount === 0) {
+      const pkg = submission.packageId ? await prisma.package.findUnique({ where: { id: submission.packageId } }) : null;
+      const durationDays = pkg?.durationDays ?? 3;
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 3);
+      expiresAt.setDate(expiresAt.getDate() + durationDays);
 
       const existing = await prisma.ad.findUnique({
         where: { submissionId },
@@ -81,6 +84,8 @@ export async function POST(req: NextRequest) {
           bookingType: submission.bookingType,
           offerStartDate: submission.offerStartDate,
           offerEndDate: submission.offerEndDate,
+          isFeatured: pkg?.isFeatured ?? false,
+          isPinned: pkg?.isPinned ?? false,
           status: "PUBLISHED",
           publishedAt: new Date(),
           expiresAt,
@@ -109,9 +114,9 @@ export async function POST(req: NextRequest) {
         data: { status: "PUBLISHED" },
       });
 
-      
       // Telegram channel publish
-      if ((submission as any).publishTarget === "website+telegram") {
+      const pubTarget = ((submission as any).publishTarget || "") as string;
+      if (pubTarget.includes("telegram")) {
         const BOT = process.env.TELEGRAM_BOT_TOKEN || "";
         const CHAN = process.env.TELEGRAM_CHANNEL_ID || "";
         if (BOT && CHAN) {
@@ -123,27 +128,21 @@ export async function POST(req: NextRequest) {
             : isNeg ? "\n💰 Price: Negotiable" : "";
           const desc = (ad.description || "").slice(0, 700);
           const ellipsis = (ad.description?.length ?? 0) > 700 ? "..." : "";
-          const waNum = (submission as any).whatsappNumber || "";
-          const phone = (submission as any).contactPhone || "";
-          const method = (submission as any).contactMethod || "";
-          const telegramUser = (submission as any).telegramUsername || (submission as any).telegramChatId || "";
-          const callLine = (method === "call" || method === "both") && phone
-            ? `\n📞 Call: +${phone}`
-            : "";
-          const caption = `📢 ${ad.title}\n🗂 ${ad.category}${priceLine}${callLine}\n\n${desc}${ellipsis}\n\n🔗 ${adUrl}`;
-          const contactButtons: { text: string; url: string }[] = [];
-          if ((method === "whatsapp" || method === "both") && waNum) {
-            contactButtons.push({ text: "💬 WhatsApp", url: `https://wa.me/${waNum}` });
-          }
-          if (telegramUser) {
-            const tgContact = String(telegramUser).startsWith("-") || Number.isInteger(Number(telegramUser))
-              ? `https://t.me/${telegramUser}`
-              : `https://t.me/${String(telegramUser).replace("@", "")}`;
-            contactButtons.push({ text: "✈️ Telegram", url: tgContact });
-          }
-          const replyMarkup = contactButtons.length > 0
-            ? { inline_keyboard: [contactButtons] }
-            : undefined;
+          const rawWaNum = ((submission as any).whatsappNumber || "").replace(/\D/g, "");
+          const rawPhone = ((submission as any).contactPhone || submission.phone || "").replace(/\D/g, "");
+          const methodStr = (submission as any).contactMethod || "";
+          const methods = methodStr ? methodStr.split(",").map((m: string) => m.trim()) : [];
+          const hasCall = methods.includes("call") || methods.includes("both");
+          const hasWA   = (methods.includes("whatsapp") || methods.includes("both")) && !!rawWaNum;
+          const hasTg   = methods.includes("telegram");
+          const callLine2 = hasCall && rawPhone ? `\n📞 +${rawPhone}` : "";
+          const caption = `📢 ${ad.title}\n🗂 ${ad.category}${priceLine}${callLine2}\n\n${desc}${ellipsis}\n\n🔗 ${adUrl}`;
+          const buttons: { text: string; url: string }[] = [];
+          if (hasWA)  buttons.push({ text: "💬 WhatsApp", url: `https://wa.me/${rawWaNum}` });
+          const tgUser = ((submission as any).telegramUsername || "").replace(/^@/, "");
+          if (hasTg && tgUser) buttons.push({ text: "✈️ Telegram", url: `https://t.me/${tgUser}` });
+          buttons.push({ text: "🔗 View Ad", url: adUrl });
+          const replyMarkup = { inline_keyboard: [buttons] };
           const firstMedia = (submission as any).submissionMedia?.[0];
           const photoUrl = firstMedia
             ? (firstMedia.tempKey.startsWith("/") ? `${process.env.APP_URL || "https://classifiedsuae.ae"}${firstMedia.tempKey}` : `${process.env.APP_URL || "https://classifiedsuae.ae"}/uploads/${firstMedia.tempKey}`)
@@ -152,29 +151,56 @@ export async function POST(req: NextRequest) {
             const tgRes = await fetch(`https://api.telegram.org/bot${BOT}/sendPhoto`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chat_id: CHAN, photo: photoUrl, caption: caption.slice(0, 1024), ...(replyMarkup && { reply_markup: replyMarkup }) }),
+              body: JSON.stringify({ chat_id: CHAN, photo: photoUrl, caption: caption.slice(0, 1024), reply_markup: replyMarkup }),
             }).catch((e: unknown) => { console.error("TG sendPhoto error:", e); return null; });
             const tgJson = await tgRes?.json().catch(() => null);
-            console.log("TG sendPhoto result:", JSON.stringify(tgJson), "photoUrl:", photoUrl);
             if (!tgJson?.ok) {
-              // fallback to text
-              const tgRes2 = await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
+              await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ chat_id: CHAN, text: caption.slice(0, 4096), ...(replyMarkup && { reply_markup: replyMarkup }) }),
-              }).catch((e: unknown) => { console.error("TG sendMessage error:", e); return null; });
-              console.log("TG sendMessage fallback:", JSON.stringify(await tgRes2?.json().catch(() => null)));
+                body: JSON.stringify({ chat_id: CHAN, text: caption.slice(0, 4096), reply_markup: replyMarkup }),
+              }).catch((e: unknown) => { console.error("TG sendMessage error:", e); });
             }
           } else {
-            const tgRes3 = await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
+            await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chat_id: CHAN, text: caption.slice(0, 4096), ...(replyMarkup && { reply_markup: replyMarkup }) }),
-            }).catch((e: unknown) => { console.error("TG sendMessage error:", e); return null; });
-            console.log("TG sendMessage result:", JSON.stringify(await tgRes3?.json().catch(() => null)));
+              body: JSON.stringify({ chat_id: CHAN, text: caption.slice(0, 4096), reply_markup: replyMarkup }),
+            }).catch((e: unknown) => { console.error("TG sendMessage error:", e); });
           }
         }
       }
+
+      // Social (Facebook + Instagram) publish — only if user selected them
+      if (pubTarget.includes("facebook") || pubTarget.includes("instagram")) {
+        const APP_URL = process.env.APP_URL || "https://classifiedsuae.ae";
+        const adUrl2 = `${APP_URL}/ad/${ad.id}`;
+        const firstMedia2 = submission.submissionMedia?.[0];
+        const imageUrl = firstMedia2
+          ? `${APP_URL}${firstMedia2.tempKey.startsWith("/") ? firstMedia2.tempKey : `/${firstMedia2.tempKey}`}`
+          : null;
+        const methodStr2 = (submission as any).contactMethod || "";
+        const methods2 = methodStr2 ? methodStr2.split(",").map((m: string) => m.trim()) : [];
+        const phone2 = ((submission as any).contactPhone || submission.phone || "").replace(/\D/g, "");
+        const waNum2 = ((submission as any).whatsappNumber || "").replace(/\D/g, "");
+        const contactLines2: string[] = [];
+        if (methods2.includes("call") && phone2) contactLines2.push(`📞 +${phone2}`);
+        if (methods2.includes("whatsapp") && waNum2) contactLines2.push(`💬 wa.me/${waNum2}`);
+        if (methods2.includes("telegram")) contactLines2.push(`✈️ Telegram`);
+        publishToSocial({
+          title: ad.title || "",
+          description: ad.description || "",
+          category: ad.category,
+          adUrl: adUrl2,
+          imageUrl,
+          adPrice: (submission as any).adPrice ?? null,
+          isNegotiable: (submission as any).isNegotiable ?? false,
+          contactLines: contactLines2,
+          publishFacebook: pubTarget.includes("facebook"),
+          publishInstagram: pubTarget.includes("instagram"),
+        }).catch(e => console.error("SOCIAL PUBLISH ERROR (create):", e));
+      }
+
       return NextResponse.json({ free: true, adId: ad.id });
     }
 

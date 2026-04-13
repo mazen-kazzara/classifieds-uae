@@ -7,11 +7,13 @@ const rateLimiter = new RateLimiterMemory({ points: 100, duration: 60 });
 const adminLimiter = new RateLimiterMemory({ points: 20, duration: 60 });
 
 const locales = ["en", "ar"];
-const defaultLocale = "en";
+const defaultLocale = "ar";
 
 function getLocale(req: NextRequest): string {
-  const acceptLang = req.headers.get("accept-language") ?? "";
-  if (acceptLang.toLowerCase().includes("ar")) return "ar";
+  // 1. Check cookie (user's explicit choice)
+  const cookieLocale = req.cookies.get("locale")?.value;
+  if (cookieLocale && locales.includes(cookieLocale)) return cookieLocale;
+  // 2. Default to Arabic
   return defaultLocale;
 }
 

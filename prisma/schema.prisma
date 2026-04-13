@@ -10,15 +10,18 @@ datasource db {
 
 model User {
   id        String   @id @default(cuid())
-  phone     String   @unique
+  phone     String?  @unique
   email     String?  @unique
   name      String?
   password  String?
   role      UserRole @default(USER)
+  provider  String?
 
-  otpCode      String?
-  otpExpiresAt DateTime?
-  otpAttempts  Int      @default(0)
+  otpCode       String?
+  otpExpiresAt  DateTime?
+  otpAttempts   Int      @default(0)
+  phoneVerified Boolean  @default(false)
+  emailVerified Boolean  @default(false)
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -27,6 +30,7 @@ model User {
   audits      AuditLog[]
 
   @@index([phone])
+  @@index([email])
 }
 
 model Category {
@@ -76,10 +80,11 @@ model AdSubmission {
   title          String?
   contactPhone   String?
   whatsappNumber String?
-  telegramChatId String?
-  contactEmail   String?
-  contactMethod  String?
-  contentType    String    @default("ad")
+  telegramChatId   String?
+  telegramUsername String?
+  contactEmail     String?
+  contactMethod    String?
+  contentType      String    @default("ad")
 
   offerStartDate DateTime?
   offerEndDate   DateTime?
@@ -89,9 +94,9 @@ model AdSubmission {
   images      String[]
   imagesCount Int      @default(0)
 
-  priceText   Int?
-  priceImages Int?
-  priceTotal  Int?
+  priceText   Float?
+  priceImages Float?
+  priceTotal  Float?
 
   packageId String?
   package   Package? @relation(fields: [packageId], references: [id])
@@ -132,11 +137,12 @@ model Ad {
   bookingEnabled Boolean   @default(false)
   bookingType    String?
 
-  contactPhone   String?
-  whatsappNumber String?
-  telegramChatId String?
-  contactEmail   String?
-  contactMethod  String?
+  contactPhone     String?
+  whatsappNumber   String?
+  telegramChatId   String?
+  telegramUsername String?
+  contactEmail     String?
+  contactMethod    String?
 
   isFeatured Boolean @default(false)
   isPinned   Boolean @default(false)
@@ -199,7 +205,7 @@ model Payment {
   submission   AdSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
   provider    String
-  amount      Int
+  amount      Float
   currency    String
   status      PaymentStatus
 

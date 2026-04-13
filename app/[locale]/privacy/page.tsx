@@ -3,7 +3,7 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Privacy Policy | Classifieds UAE" };
+export const metadata: Metadata = { title: "Privacy Policy | CLASSIFIEDS UAE" };
 
 const h2Style = { color: "var(--text)", fontWeight: 700 as const, fontSize: "1.0625rem", marginBottom: "0.625rem", marginTop: "2rem", paddingBottom: "0.375rem", borderBottom: "1px solid var(--border)" };
 const h3Style = { color: "var(--text)", fontWeight: 600 as const, fontSize: "0.9375rem", marginBottom: "0.5rem", marginTop: "1rem" };
@@ -18,7 +18,7 @@ export default async function PrivacyPage({ params }: Props) {
   const isAr = locale === "ar";
 
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }} dir={isAr ? "rtl" : "ltr"}>
       <Header />
       <main className="max-w-3xl mx-auto px-4 py-12">
         <div style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "2.5rem" }} className="shadow-card">
@@ -29,7 +29,7 @@ export default async function PrivacyPage({ params }: Props) {
               {isAr ? "سياسة الخصوصية" : "Privacy Policy"}
             </h1>
             <p style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
-              {isAr ? "كلاسيفايدز يو إي | classifiedsuae.ae" : "Classifieds UAE | classifiedsuae.ae"}
+              {isAr ? "CLASSIFIEDS UAE | classifiedsuae.ae" : "CLASSIFIEDS UAE | classifiedsuae.ae"}
             </p>
             <p style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
               {isAr ? "تاريخ السريان: أبريل 2026 | القانون الحاكم: الإمارات العربية المتحدة" : "Effective Date: April 2026 | Governing Law: United Arab Emirates"}
@@ -39,15 +39,15 @@ export default async function PrivacyPage({ params }: Props) {
           <div style={{ color: "var(--text-muted)", lineHeight: 1.9, fontSize: "0.9375rem" }}>
 
             <div style={boxStyle}>{isAr
-              ? "كلاسيفايدز يو إي ملتزمة بحماية خصوصيتك. نجمع فقط الحد الأدنى من البيانات اللازمة لتشغيل منصتنا ولا نبيع معلوماتك الشخصية لأي طرف ثالث."
-              : "Classifieds UAE is committed to protecting your privacy. We collect only the minimum data necessary to operate our platform and never sell your personal information to any third party."
+              ? "CLASSIFIEDS UAE ملتزمة بحماية خصوصيتك. نجمع فقط الحد الأدنى من البيانات اللازمة لتشغيل منصتنا ولا نبيع معلوماتك الشخصية لأي طرف ثالث."
+              : "CLASSIFIEDS UAE is committed to protecting your privacy. We collect only the minimum data necessary to operate our platform and never sell your personal information to any third party."
             }</div>
 
             {/* 1 */}
             <h2 style={h2Style}>{isAr ? "1. من نحن" : "1. Who We Are"}</h2>
             <p style={pStyle}>{isAr
-              ? 'كلاسيفايدز يو إي ("نحن"، "المنصة") هي منصة إعلانات مبوبة إلكترونية مرخصة وتعمل في الإمارات العربية المتحدة تحت الاسم التجاري كلاسيفايدز يو إي. موقعنا متاح على classifiedsuae.ae.'
-              : 'Classifieds UAE ("we", "us", "the Platform") is an online classified advertising platform licensed and operating in the United Arab Emirates under the trade name Classifieds UAE. Our website is accessible at classifiedsuae.ae.'
+              ? 'CLASSIFIEDS UAE ("نحن"، "المنصة") هي منصة إعلانات مبوبة إلكترونية مرخصة وتعمل في الإمارات العربية المتحدة تحت الاسم التجاري CLASSIFIEDS UAE. موقعنا متاح على classifiedsuae.ae.'
+              : 'CLASSIFIEDS UAE ("we", "us", "the Platform") is an online classified advertising platform licensed and operating in the United Arab Emirates under the trade name CLASSIFIEDS UAE. Our website is accessible at classifiedsuae.ae.'
             }</p>
 
             {/* 2 */}
@@ -194,13 +194,19 @@ export default async function PrivacyPage({ params }: Props) {
             }</p>
             <ul style={ulStyle}>
               {isAr ? <>
-                <li>الموقع: classifiedsuae.ae</li>
-                <li>تيليغرام: القناة الرسمية لكلاسيفايدز يو إي</li>
-                <li>واتساب: الرقم الرسمي لكلاسيفايدز يو إي</li>
+                <li>الموقع: <a href="https://classifiedsuae.ae" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuae.ae</a></li>
+                <li>البريد الإلكتروني: <a href="mailto:info@classifiedsuae.ae" style={{ color: "var(--primary)", textDecoration: "none" }}>info@classifiedsuae.ae</a></li>
+                <li>فيسبوك: <a href="https://facebook.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
+                <li>إنستغرام: <a href="https://instagram.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
+                <li>تيليغرام: <a href="https://t.me/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>القناة الرسمية</a></li>
+                <li>واتساب: <a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>القناة الرسمية</a></li>
               </> : <>
-                <li>Website: classifiedsuae.ae</li>
-                <li>Telegram: Official Classifieds UAE channel</li>
-                <li>WhatsApp: Official Classifieds UAE number</li>
+                <li>Website: <a href="https://classifiedsuae.ae" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuae.ae</a></li>
+                <li>Email: <a href="mailto:info@classifiedsuae.ae" style={{ color: "var(--primary)", textDecoration: "none" }}>info@classifiedsuae.ae</a></li>
+                <li>Facebook: <a href="https://facebook.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
+                <li>Instagram: <a href="https://instagram.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
+                <li>Telegram: <a href="https://t.me/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official Channel</a></li>
+                <li>WhatsApp: <a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official Channel</a></li>
               </>}
             </ul>
             <p style={pStyle}>{isAr

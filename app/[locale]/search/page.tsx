@@ -5,7 +5,28 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { getTranslations } from "@/lib/getTranslations";
 import type { Metadata } from "next";
-export const metadata: Metadata = { title: "Search | Classifieds UAE" };
+export const metadata: Metadata = {
+  title: "Search Ads | Classifieds UAE",
+  description: "Search classified ads in UAE. Find vehicles, real estate, electronics, jobs, services and more.",
+  robots: { index: false },
+};
+
+const CATEGORY_IMAGES: Record<string, string> = {
+  vehicles: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=800&q=80",
+  "real-estate": "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&q=80",
+  electronics: "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=800&q=80",
+  jobs: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800&q=80",
+  services: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&q=80",
+  salons: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&q=80",
+  clinics: "https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=800&q=80",
+  furniture: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&q=80",
+  education: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&q=80",
+  other: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=800&q=80",
+};
+function getCategoryImage(category: string): string {
+  const s = category.toLowerCase().replace(/ /g, "-").replace(/&/g, "").replace(/--/g, "-");
+  return CATEGORY_IMAGES[s] || CATEGORY_IMAGES["other"];
+}
 
 interface Props { searchParams: Promise<{ q?: string; type?: string; category?: string; featured?: string; page?: string }>; params: Promise<{ locale: string }> }
 
@@ -59,10 +80,10 @@ export default async function SearchPage({ searchParams, params }: Props) {
   }
 
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }} dir={locale === "ar" ? "rtl" : "ltr"}>
       <Header />
       <main className="max-w-6xl mx-auto px-4 py-8">
-        <form action="/search" method="GET" className="flex gap-2 mb-6">
+        <form action={`/${locale}/search`} method="GET" className="flex gap-2 mb-6">
           <input name="q" type="text" defaultValue={query} placeholder={locale === "ar" ? "ابحث عن إعلانات..." : "Search ads..."} className="flex-1 px-4 py-3 border border-gray-200 rounded-xl outline-none focus:border-blue-400 bg-white shadow-sm" />
           <button type="submit" className="px-6 py-3 bg-blue-600 text-white rounded-xl font-semibold hover:bg-blue-700 transition">{locale === "ar" ? "بحث" : "Search"}</button>
         </form>
@@ -88,7 +109,7 @@ export default async function SearchPage({ searchParams, params }: Props) {
                   ))}
                 </div>
               </div>
-              <Link href={buildUrl({ featured: featuredOnly?"":"true", page:"1" })} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition ${featuredOnly?"bg-yellow-50 text-yellow-700 font-semibold":"text-gray-600 hover:bg-gray-50"}`}>{locale === "ar" ? "⭐ المميزة فقط" : "⭐ Featured only"}</Link>
+              <Link href={buildUrl({ featured: featuredOnly?"":"true", page:"1" })} className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm transition ${featuredOnly?"bg-yellow-50 text-yellow-700 font-semibold":"text-gray-600 hover:bg-gray-50"}`}>{locale === "ar" ? "المميزة فقط" : "Featured only"}</Link>
             </div>
           </aside>
           <div className="flex-1">
@@ -96,7 +117,7 @@ export default async function SearchPage({ searchParams, params }: Props) {
             {ads.length === 0 ? (
               <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-gray-200">
                 <p className="text-gray-400 text-lg mb-4">{locale === "ar" ? "لا توجد نتائج" : "No results found"}</p>
-                <Link href="/new" className="bg-blue-600 text-white px-6 py-2 rounded-xl text-sm font-semibold">{locale === "ar" ? "انشر إعلاناً" : "Post an ad"}</Link>
+                <Link href={`/${locale}/new`} className="bg-blue-600 text-white px-6 py-2 rounded-xl text-sm font-semibold">{locale === "ar" ? "انشر إعلاناً" : "Post an ad"}</Link>
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
@@ -104,16 +125,19 @@ export default async function SearchPage({ searchParams, params }: Props) {
                   const image = ad.media[0];
                   const title = ad.title || ad.description.slice(0,60);
                   return (
-                    <Link key={ad.id} href={`/ad/${ad.id}`} className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-md hover:border-blue-200 transition group">
+                    <Link key={ad.id} href={`/${locale}/ad/${ad.id}`} className="bg-white rounded-xl border border-gray-100 overflow-hidden hover:shadow-md hover:border-blue-200 transition group">
                       <div className="relative h-40 bg-gray-100 overflow-hidden">
-                        {image ? (
-                          // eslint-disable-next-line @next/next/no-img-element
-                          <img src={image.url.startsWith("/") ? image.url : `/uploads/${image.url}`} alt={title} className="w-full h-full object-cover group-hover:scale-105 transition" />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center text-4xl bg-gradient-to-br from-gray-50 to-gray-200">{ad.contentType==="offer"?"🔥":ad.contentType==="service"?"🛠️":"📦"}</div>
-                        )}
-                        <div className="absolute top-2 left-2 flex gap-1">
-                          {ad.isFeatured && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">⭐</span>}
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={image ? (image.url.startsWith("/") ? image.url : `/uploads/${image.url}`) : getCategoryImage(ad.category)}
+                          alt={title}
+                          loading="eager"
+                          style={image ? {} : { opacity: 0.5 }}
+                          className="w-full h-full object-cover group-hover:scale-105 transition"
+                        />
+                        {!image && <span style={{ position: "absolute", bottom: "0.375rem", insetInlineEnd: "0.375rem", fontSize: "0.55rem", fontWeight: 600, padding: "0.125rem 0.375rem", borderRadius: 999, backgroundColor: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.75)" }}>{locale === "ar" ? "صورة توضيحية" : "Illustrative"}</span>}
+                        <div className="absolute top-2 flex gap-1" style={{ insetInlineStart: "0.5rem" }}>
+                          {ad.isFeatured && <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-yellow-100 text-yellow-700">{locale === "ar" ? "مميز" : "Featured"}</span>}
                           {ad.contentType!=="ad" && <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ad.contentType==="offer"?"bg-orange-100 text-orange-700":"bg-green-100 text-green-700"}`}>{ad.contentType==="offer" ? (locale==="ar"?"عرض":"Offer") : (locale==="ar"?"خدمة":"Service")}</span>}
                         </div>
                       </div>

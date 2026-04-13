@@ -2,6 +2,7 @@
 import { useState, useEffect, Suspense } from "react";
 import { useTranslations, useLocale } from "@/lib/useTranslations";
 import { useSearchParams, useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
@@ -29,6 +30,7 @@ const inputBase: React.CSSProperties = {
   backgroundColor: "var(--surface)", color: "var(--text)",
   border: "1.5px solid var(--border)", borderRadius: "var(--radius-md)",
   fontSize: "0.875rem", outline: "none", fontFamily: "inherit", boxSizing: "border-box",
+  textAlign: "inherit",
 };
 const inputError: React.CSSProperties = { borderColor: "var(--danger)" };
 const labelStyle: React.CSSProperties = { display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.375rem" };
@@ -46,6 +48,18 @@ function NewAdForm() {
   const [error, setError] = useState("");
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
 
+  const { data: session, status: authStatus } = useSession();
+  const sessionPhone = (session?.user as any)?.phone ?? "";
+  const phoneVerified = (session?.user as any)?.phoneVerified ?? false;
+  const locale2 = useLocale();
+
+  // ── Auth gate ──────────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (authStatus === "unauthenticated") {
+      router.push(`/${locale2}/login?redirect=/new`);
+    }
+  }, [authStatus, router, locale2]);
+
   const [phone, setPhone] = useState("971");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -59,13 +73,18 @@ function NewAdForm() {
   const [offerEndDate, setOfferEndDate] = useState("");
   const [bookingEnabled, setBookingEnabled] = useState(false);
   const [bookingType, setBookingType] = useState("whatsapp");
-  const [publishTarget, setPublishTarget] = useState("website");
+  const [publishPlatforms, setPublishPlatforms] = useState<string[]>(["website"]);
   const [img1, setImg1] = useState<File | null>(null);
   const [img2, setImg2] = useState<File | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<Package | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
   const [selectedPlan, setSelectedPlan] = useState("free");
+
+  // Pre-fill phone from session
+  useEffect(() => {
+    if (sessionPhone) { setPhone(sessionPhone); setContactPhone(sessionPhone); }
+  }, [sessionPhone]);
 
   useEffect(() => {
     const presetPkg = sp.get("packageId");
@@ -104,7 +123,7 @@ function NewAdForm() {
     if (title.trim().length > 100) errs.title = locale === "ar" ? "العنوان يجب أن لا يتجاوز 100 حرف" : "Title must be under 100 characters";
     if (!description.trim() || description.trim().length < 10) errs.description = locale === "ar" ? "الوصف يجب أن يكون 10 أحرف على الأقل" : "Description must be at least 10 characters";
     if (description.trim().length > 2000) errs.description = locale === "ar" ? "الوصف يجب أن لا يتجاوز 2000 حرف" : "Description must be under 2000 characters";
-    if (!categoryId) errs.category = "Please select a category";
+    if (!categoryId) errs.category = locale === "ar" ? "يرجى اختيار فئة" : "Please select a category";
     if (!isNegotiable) {
       if (!adPriceRaw) errs.adPrice = "Price is required unless negotiable";
       else if (isNaN(Number(adPriceRaw.replace(/,/g,""))) || Number(adPriceRaw.replace(/,/g,"")) < 0)
@@ -124,6 +143,7 @@ function NewAdForm() {
       if (we) errs.whatsappNumber = we;
     }
     if (contentType === "offer" && !offerEndDate) errs.offerEndDate = "Offer end date is required";
+    if (publishPlatforms.length === 0) errs.publishTarget = locale === "ar" ? "يرجى اختيار منصة واحدة على الأقل" : "Please select at least one platform";
     setFieldErrors(errs);
     return !Object.keys(errs).length;
   }
@@ -134,7 +154,16 @@ function NewAdForm() {
     try {
       const res = await fetch("/api/submissions/start", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone }) });
       const data = await res.json();
-      if (!data.ok) throw new Error(data.error || "Failed to start");
+      if (!data.ok) {
+        const errMap: Record<string, string> = {
+          UNAUTHORIZED: locale === "ar" ? "يرجى تسجيل الدخول أولاً" : "Please sign in first",
+          PHONE_REQUIRED: locale === "ar" ? "رقم الهاتف مطلوب" : "Phone number is required",
+          INVALID_PHONE_FORMAT: locale === "ar" ? "صيغة رقم الهاتف غير صحيحة (971XXXXXXXXX)" : "Invalid phone format (971XXXXXXXXX)",
+          DAILY_LIMIT_REACHED: locale === "ar" ? "وصلت الحد اليومي (5 إعلانات)" : "Daily limit reached (5 ads)",
+          RATE_LIMIT_EXCEEDED: locale === "ar" ? "محاولات كثيرة، حاول لاحقاً" : "Too many attempts, try later",
+        };
+        throw new Error(errMap[data.error] || data.error || "Failed");
+      }
       setSubmissionId(data.submissionId); setStep("package");
     } catch (e: unknown) { setError(e instanceof Error ? e.message : "Something went wrong"); }
     finally { setLoading(false); }
@@ -145,19 +174,22 @@ function NewAdForm() {
     setLoading(true); setError("");
     try {
       const adPriceNum = adPriceRaw ? Number(adPriceRaw.replace(/,/g, "")) : null;
-      await fetch(`/api/submissions/${submissionId}/language`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "EN" }) });
-      await fetch(`/api/submissions/${submissionId}/category`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ categoryId }) });
-      const textRes = await fetch(`/api/submissions/${submissionId}/text`, {
+      async function safeJson(res: Response, label: string) {
+        const text = await res.text();
+        try { return JSON.parse(text); } catch { throw new Error(`${label}: invalid response`); }
+      }
+      await safeJson(await fetch(`/api/submissions/${submissionId}/language`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ language: "EN" }) }), "language");
+      await safeJson(await fetch(`/api/submissions/${submissionId}/category`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ categoryId }) }), "category");
+      const textData = await safeJson(await fetch(`/api/submissions/${submissionId}/text`, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text: description, title, adPrice: adPriceNum, isNegotiable }),
-      });
-      const textData = await textRes.json();
+      }), "text");
       if (!textData.ok) { if (textData.field) setFieldErrors(e => ({ ...e, [textData.field]: textData.error })); throw new Error(textData.error || "Failed"); }
-      const contactRes = await fetch(`/api/submissions/${submissionId}/contact`, {
+      const contactData = await safeJson(await fetch(`/api/submissions/${submissionId}/contact`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactPhone, whatsappNumber: whatsappNumber || null, contactMethod, contentType, offerStartDate: offerStartDate || null, offerEndDate: offerEndDate || null, bookingEnabled, bookingType, publishTarget }),
-      });
-      if (!(await contactRes.json()).ok) throw new Error("Failed to save contact");
+        body: JSON.stringify({ contactPhone, whatsappNumber: whatsappNumber || null, contactMethod, contentType, offerStartDate: offerStartDate || null, offerEndDate: offerEndDate || null, bookingEnabled, bookingType, publishTarget: publishPlatforms.join("+") }),
+      }), "contact");
+      if (!contactData.ok) throw new Error("Failed to save contact");
       if (img1) { const f = new FormData(); f.append("file", img1); f.append("position", "1"); await fetch(`/api/submissions/${submissionId}/images`, { method: "POST", body: f }); }
       if (img2) { const f = new FormData(); f.append("file", img2); f.append("position", "2"); await fetch(`/api/submissions/${submissionId}/images`, { method: "POST", body: f }); }
       await createPayment();
@@ -231,19 +263,28 @@ async function createPayment() {
   const normalTotal = Math.min(NORMAL_BASE + normalImgCost, NORMAL_MAX);
   function getDisplayTotal() {
     if (isFree) return 0;
+    if (selectedPackage) {
+      if (selectedPackage.isFeatured) return selectedPackage.price;
+      return Math.min(selectedPackage.price + normalImgCost, selectedPackage.price + 5);
+    }
     if (isNormal) return normalTotal;
     return FEATURED_PRICE;
   }
   function getSubmitPackage() {
     if (isFree) return null;
-    if (isNormal) return normalPkg || null;
-    return featuredPkg || null;
+    return selectedPackage || null;
   }
 
+  // ── Loading / not authenticated ───────────────────────────────────────────
+  if (authStatus === "loading") return (
+    <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--text-muted)" }}>Loading…</div>
+  );
+  if (authStatus === "unauthenticated") return null;
+
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }} dir={locale === "ar" ? "rtl" : "ltr"}>
       <Header />
-      <main className="max-w-2xl mx-auto px-4 py-8">
+      <main className="max-w-2xl mx-auto px-4 py-8" style={{ textAlign: locale === "ar" ? "right" : "left" }}>
         {/* Progress */}
         <div className="flex items-center gap-2 mb-8">
           {(["type", "package", "details", "done"] as const).map((stepKey, i) => {
@@ -279,7 +320,7 @@ async function createPayment() {
 
         {error && (
           <div style={{ backgroundColor: "color-mix(in srgb, var(--danger) 10%, var(--surface))", border: "1.5px solid var(--danger)", borderRadius: "var(--radius-md)", padding: "0.875rem 1rem", marginBottom: "1rem", color: "var(--danger)", fontSize: "0.875rem" }}>
-            ❌ {error}
+            {error}
           </div>
         )}
 
@@ -288,10 +329,9 @@ async function createPayment() {
           <div style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "1.75rem" }} className="shadow-card">
             <h2 style={{ color: "var(--text)", fontWeight: 700, fontSize: "1.25rem", marginBottom: "1.25rem" }}>{t("whatToPost")}</h2>
             <div className="grid grid-cols-3 gap-3 mb-6">
-              {[{ id: "ad", label: t("adType"), icon: "📢", desc: t("adDesc") }, { id: "offer", label: t("offerType"), icon: "🔥", desc: t("offerDesc") }, { id: "service", label: t("serviceType"), icon: "🛠️", desc: t("serviceDesc") }].map((t) => (
+              {[{ id: "ad", label: t("adType"), desc: t("adDesc") }, { id: "offer", label: t("offerType"), desc: t("offerDesc") }, { id: "service", label: t("serviceType"), desc: t("serviceDesc") }].map((t) => (
                 <button key={t.id} onClick={() => setContentType(t.id as any)}
-                  style={{ padding: "1rem 0.75rem", borderRadius: "var(--radius-md)", border: `2px solid ${contentType === t.id ? "var(--primary)" : "var(--border)"}`, backgroundColor: contentType === t.id ? "color-mix(in srgb, var(--primary) 10%, var(--surface))" : "var(--surface)", textAlign: "left", cursor: "pointer", transition: "all 0.15s" }}>
-                  <div style={{ fontSize: "1.75rem", marginBottom: "0.375rem" }}>{t.icon}</div>
+                  style={{ padding: "1rem 0.75rem", borderRadius: "var(--radius-md)", border: `2px solid ${contentType === t.id ? "var(--primary)" : "var(--border)"}`, backgroundColor: contentType === t.id ? "color-mix(in srgb, var(--primary) 10%, var(--surface))" : "var(--surface)", textAlign: "start", cursor: "pointer", transition: "all 0.15s" }}>
                   <p style={{ fontWeight: 700, color: "var(--text)", fontSize: "0.875rem" }}>{t.label}</p>
                   <p style={{ color: "var(--text-muted)", fontSize: "0.7rem", marginTop: "0.125rem" }}>{t.desc}</p>
                 </button>
@@ -300,8 +340,8 @@ async function createPayment() {
 
             <div style={{ marginBottom: "1.25rem" }}>
               <label style={labelStyle}>{t("phoneLabel")} <span style={{ color: "var(--danger)" }}>*</span></label>
-              <input style={{ ...inputBase, ...(fieldErrors.phone ? inputError : {}) }} type="tel" value={phone}
-                onChange={(e) => { setPhone(e.target.value); setFieldErrors(fe => ({ ...fe, phone: "" })); }}
+              <input style={{ ...inputBase, ...(fieldErrors.phone ? inputError : {}) }} type="tel" inputMode="numeric" value={phone}
+                onChange={(e) => { setPhone(e.target.value.replace(/[^0-9+]/g, "")); setFieldErrors(fe => ({ ...fe, phone: "" })); }}
                 placeholder="971501234567"
                 onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
                 onBlur={(e) => (e.target.style.borderColor = fieldErrors.phone ? "var(--danger)" : "var(--border)")} />
@@ -335,7 +375,6 @@ async function createPayment() {
             <div>
               <label style={labelStyle}>
                 {locale === "ar" ? "الوصف" : "Description"} <span style={{ color: "var(--danger)" }}>*</span>
-                <span style={{ ...hintStyle, marginLeft: "0.5rem", fontWeight: 400 }}>{locale === "ar" ? "(10 د.إ لكل 100 حرف)" : "(10 AED per 100 chars)"}</span>
               </label>
               <textarea style={{ ...inputBase, height: "auto", padding: "0.75rem 1rem", resize: "none", ...(fieldErrors.description ? inputError : {}) }}
                 value={description}
@@ -360,7 +399,7 @@ async function createPayment() {
                 value={categoryId}
                 onChange={(e) => { setCategoryId(e.target.value); setFieldErrors(fe => ({ ...fe, category: "" })); }}>
                 <option value="">{locale === "ar" ? "اختر فئة" : "Select category"}</option>
-                {categories.map((c) => <option key={c.id} value={c.id}>{c.icon} {c.name}</option>)}
+                {categories.map((c) => <option key={c.id} value={c.id}>{c.icon} {locale === "ar" ? c.nameAr : c.name}</option>)}
               </select>
               {fieldErr(fieldErrors, "category")}
             </div>
@@ -414,8 +453,8 @@ async function createPayment() {
             {/* Contact Phone */}
             <div>
               <label style={labelStyle}>{t("contactPhone")} <span style={{ color: "var(--danger)" }}>*</span></label>
-              <input style={{ ...inputBase, ...(fieldErrors.contactPhone ? inputError : {}) }} type="tel" value={contactPhone}
-                onChange={(e) => { setContactPhone(e.target.value); setFieldErrors(fe => ({ ...fe, contactPhone: "" })); }}
+              <input style={{ ...inputBase, ...(fieldErrors.contactPhone ? inputError : {}) }} type="tel" inputMode="numeric" value={contactPhone}
+                onChange={(e) => { setContactPhone(e.target.value.replace(/[^0-9+]/g, "")); setFieldErrors(fe => ({ ...fe, contactPhone: "" })); }}
                 placeholder="971501234567"
                 onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
                 onBlur={(e) => (e.target.style.borderColor = fieldErrors.contactPhone ? "var(--danger)" : "var(--border)")} />
@@ -425,8 +464,8 @@ async function createPayment() {
             {/* WhatsApp */}
             <div>
               <label style={labelStyle}>{locale === "ar" ? "رقم واتساب" : "WhatsApp Number"} {(contactMethod === "whatsapp" || contactMethod === "both") ? <span style={{ color: "var(--danger)" }}>*</span> : <span style={hintStyle}> — {t("whatsappOptional")}</span>}</label>
-              <input style={{ ...inputBase, ...(fieldErrors.whatsappNumber ? inputError : {}) }} type="tel" value={whatsappNumber}
-                onChange={(e) => { setWhatsappNumber(e.target.value); setFieldErrors(fe => ({ ...fe, whatsappNumber: "" })); }}
+              <input style={{ ...inputBase, ...(fieldErrors.whatsappNumber ? inputError : {}) }} type="tel" inputMode="numeric" value={whatsappNumber}
+                onChange={(e) => { setWhatsappNumber(e.target.value.replace(/[^0-9+]/g, "")); setFieldErrors(fe => ({ ...fe, whatsappNumber: "" })); }}
                 placeholder={locale === "ar" ? "971501234567 (اتركه فارغاً إذا كان نفس رقم التواصل)" : "971501234567 (leave blank if same as contact)"}
                 onFocus={(e) => (e.target.style.borderColor = "var(--primary)")}
                 onBlur={(e) => (e.target.style.borderColor = fieldErrors.whatsappNumber ? "var(--danger)" : "var(--border)")} />
@@ -439,7 +478,7 @@ async function createPayment() {
                 {(["call", "whatsapp", "both"] as const).map((m) => (
                   <button key={m} type="button" onClick={() => { setContactMethod(m); if ((m === "whatsapp" || m === "both") && !whatsappNumber) setWhatsappNumber(contactPhone); }}
                     style={{ flex: 1, height: 44, borderRadius: "var(--radius-md)", border: `1.5px solid ${contactMethod === m ? "var(--primary)" : "var(--border)"}`, backgroundColor: contactMethod === m ? "var(--primary)" : "var(--surface)", color: contactMethod === m ? "#fff" : "var(--text-muted)", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}>
-                    {m === "call" ? `📞 ${t("callOnly")}` : m === "whatsapp" ? `💬 ${t("whatsappOnly")}` : `📞 + 💬 ${t("both")}`}
+                    {m === "call" ? t("callOnly") : m === "whatsapp" ? t("whatsappOnly") : t("both")}
                   </button>
                 ))}
               </div>
@@ -450,7 +489,7 @@ async function createPayment() {
               <div style={{ backgroundColor: "color-mix(in srgb, var(--primary) 8%, var(--surface))", border: "1.5px solid color-mix(in srgb, var(--primary) 20%, var(--border))", borderRadius: "var(--radius-md)", padding: "1rem" }}>
                 <label style={{ display: "flex", alignItems: "center", gap: "0.5rem", cursor: "pointer", marginBottom: "0.75rem" }}>
                   <input type="checkbox" checked={bookingEnabled} onChange={(e) => setBookingEnabled(e.target.checked)} style={{ width: 16, height: 16, accentColor: "var(--primary)" }} />
-                  <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--text)" }}>Enable Booking Button</span>
+                  <span style={{ fontSize: "0.875rem", fontWeight: 600, color: "var(--text)" }}>{locale === "ar" ? "تفعيل زر الحجز" : "Enable Booking Button"}</span>
                 </label>
                 {bookingEnabled && (
                   <div style={{ display: "flex", gap: "0.5rem" }}>
@@ -467,57 +506,74 @@ async function createPayment() {
 
             {/* Images — only for paid plans */}
             {!isFree && <div>
-              <label style={labelStyle}>Images <span style={hintStyle}> — 2.5 AED each · max 2</span></label>
+              <label style={labelStyle}>{locale === "ar" ? "الصور" : "Images"} <span style={hintStyle}> — {locale === "ar" ? "2.5 د.إ لكل صورة · حد أقصى 2" : "2.5 AED each · max 2"}</span></label>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.75rem" }}>
-                {([{ file: img1, setFile: setImg1, label: "Image 1" }, { file: img2, setFile: setImg2, label: "Image 2" }] as const).map(({ file, setFile, label }) => (
-                  <label key={label} style={{ cursor: "pointer" }}>
+                {([{ file: img1, setFile: setImg1, labelAr: "صورة 1", labelEn: "Image 1" }, { file: img2, setFile: setImg2, labelAr: "صورة 2", labelEn: "Image 2" }]).map(({ file, setFile, labelAr, labelEn }) => {
+                  const label = locale === "ar" ? labelAr : labelEn;
+                  return (
+                  <label key={labelEn} style={{ cursor: "pointer" }}>
                     <div style={{ border: `2px dashed ${file ? "var(--primary)" : "var(--border)"}`, borderRadius: "var(--radius-md)", padding: "1rem", textAlign: "center", backgroundColor: file ? "color-mix(in srgb, var(--primary) 8%, var(--surface))" : "var(--surface-2)", transition: "all 0.15s" }}>
                       {file ? (
                         <div>
                           <p style={{ color: "var(--primary)", fontSize: "0.875rem", fontWeight: 600 }}>✓ {label}</p>
                           <p style={{ color: "var(--text-muted)", fontSize: "0.7rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{file.name}</p>
-                          <button onClick={(e) => { e.preventDefault(); setFile(null); }} style={{ color: "var(--danger)", fontSize: "0.75rem", marginTop: "0.25rem", background: "none", border: "none", cursor: "pointer" }}>Remove</button>
+                          <button onClick={(e) => { e.preventDefault(); setFile(null); }} style={{ color: "var(--danger)", fontSize: "0.75rem", marginTop: "0.25rem", background: "none", border: "none", cursor: "pointer" }}>{locale === "ar" ? "حذف" : "Remove"}</button>
                         </div>
                       ) : (
                         <div>
-                          <p style={{ fontSize: "1.5rem", marginBottom: "0.25rem" }}>📷</p>
-                          <p style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>Add {label}</p>
+                          <p style={{ fontSize: "0.875rem", marginBottom: "0.25rem", color: "var(--text-muted)" }}>+</p>
+                          <p style={{ color: "var(--text-muted)", fontSize: "0.75rem" }}>{locale === "ar" ? "أضف " + label : "Add " + label}</p>
                           <p style={{ color: "var(--text-muted)", fontSize: "0.7rem", marginTop: "0.125rem" }}>{locale === "ar" ? "+2.5 د.إ" : "+2.5 AED"}</p>
                         </div>
                       )}
                       <input type="file" accept="image/jpeg,image/png,image/webp" style={{ display: "none" }} onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
                     </div>
                   </label>
-                ))}
+                  );
+                })}
               </div>
             </div>}
 
-            {/* Publish target */}
+            {/* Publish platforms — multi-select toggles */}
             <div>
               <label style={labelStyle}>{t("publishTo")}</label>
-              <p style={{ ...hintStyle, marginBottom: "0.75rem" }}>{locale === "ar" ? "سيتم نشر إعلانك على المنصات التالية:" : "Your ad will be published on the following platforms:"}</p>
+              <p style={{ ...hintStyle, marginBottom: "0.75rem" }}>{locale === "ar" ? "اختر منصة واحدة أو أكثر لنشر إعلانك:" : "Select one or more platforms to publish your ad:"}</p>
 
-              {/* Active channels */}
-              <div style={{ display: "flex", gap: "0.5rem", marginBottom: "0.75rem" }}>
-                {[
-                  { val: "website", label: t("website") },
-                  { val: "website+telegram", label: t("websiteTelegram") },
-                ].map((t) => (
-                  <button key={t.val} onClick={() => setPublishTarget(t.val)}
-                    style={{ flex: 1, height: 44, padding: "0 0.75rem", borderRadius: "var(--radius-md)", border: `1.5px solid ${publishTarget === t.val ? "var(--primary)" : "var(--border)"}`, backgroundColor: publishTarget === t.val ? "color-mix(in srgb, var(--primary) 10%, var(--surface))" : "var(--surface)", color: publishTarget === t.val ? "var(--primary)" : "var(--text-muted)", fontSize: "0.8125rem", fontWeight: 600, cursor: "pointer", transition: "all 0.15s" }}>
-                    {t.label}
-                  </button>
-                ))}
-              </div>
-
-              {/* Coming soon channels */}
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.5rem" }}>
-                {(locale === "ar" ? ["واتساب", "فيسبوك", "إنستغرام"] : ["WhatsApp", "Facebook", "Instagram"]).map((label) => (
-                  <div key={label} style={{ height: 40, borderRadius: "var(--radius-md)", border: "1.5px dashed var(--border)", backgroundColor: "var(--surface-2)", display: "flex", alignItems: "center", justifyContent: "center", gap: "0.375rem", opacity: 0.55, cursor: "not-allowed" }}>
-                    <span style={{ color: "var(--text-muted)", fontSize: "0.75rem", fontWeight: 500 }}>{label}</span>
-                    <span style={{ fontSize: "0.55rem", fontWeight: 700, backgroundColor: "var(--border)", color: "var(--text-muted)", padding: "0.1rem 0.35rem", borderRadius: 999, textTransform: "uppercase", letterSpacing: "0.04em" }}>{locale === "ar" ? "قريباً" : "Soon"}</span>
-                  </div>
-                ))}
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0.5rem" }}>
+                {([
+                  { key: "website",   ar: "الموقع",     en: "Website",  alwaysAvailable: true },
+                  { key: "telegram",  ar: "تيليغرام",   en: "Telegram", alwaysAvailable: true },
+                  { key: "facebook",  ar: "فيسبوك",    en: "Facebook", alwaysAvailable: false },
+                  { key: "instagram", ar: "انستقرام",   en: "Instagram", alwaysAvailable: false },
+                ] as const).map((p) => {
+                  const isOn = publishPlatforms.includes(p.key);
+                  const needsImages = !p.alwaysAvailable;
+                  const disabled = needsImages && isFree;
+                  const label = locale === "ar" ? p.ar : p.en;
+                  return (
+                    <button key={p.key} type="button" disabled={disabled}
+                      onClick={() => {
+                        if (disabled) return;
+                        setPublishPlatforms(prev =>
+                          prev.includes(p.key) ? prev.filter(x => x !== p.key) : [...prev, p.key]
+                        );
+                      }}
+                      style={{
+                        height: 44, borderRadius: "var(--radius-md)",
+                        border: `1.5px solid ${disabled ? "var(--border)" : isOn ? "var(--primary)" : "var(--border)"}`,
+                        backgroundColor: disabled ? "var(--surface-2)" : isOn ? "color-mix(in srgb, var(--primary) 10%, var(--surface))" : "var(--surface)",
+                        color: disabled ? "var(--text-muted)" : isOn ? "var(--primary)" : "var(--text-muted)",
+                        fontSize: "0.8125rem", fontWeight: 600,
+                        cursor: disabled ? "not-allowed" : "pointer",
+                        opacity: disabled ? 0.5 : 1,
+                        transition: "all 0.15s",
+                        display: "flex", alignItems: "center", justifyContent: "center", gap: "0.375rem",
+                      }}>
+                      {isOn && !disabled ? "✓ " : ""}{label}
+                      {disabled && <span style={{ fontSize: "0.55rem", fontWeight: 700, backgroundColor: "var(--border)", color: "var(--text-muted)", padding: "0.1rem 0.35rem", borderRadius: 999, marginInlineStart: "0.25rem" }}>{locale === "ar" ? "مدفوع" : "Paid"}</span>}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -533,43 +589,46 @@ async function createPayment() {
             <h2 style={{ color: "var(--text)", fontWeight: 700, fontSize: "1.25rem", marginBottom: "0.375rem" }}>{t("choosePlan")}</h2>
             <p style={{ ...hintStyle, marginBottom: "1.5rem" }}>{locale === "ar" ? "اختر الخطة المناسبة لك" : "Select the plan that works best for you"}</p>
 
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "0.75rem", marginBottom: "1.5rem" }}>
-              {/* FREE */}
-              <button onClick={() => { setSelectedPlan("free"); setSelectedPackage(null); }}
-                style={{ padding: "1rem 0.75rem", borderRadius: "var(--radius-md)", border: `2px solid ${isFree ? "var(--primary)" : "var(--border)"}`, backgroundColor: isFree ? "color-mix(in srgb, var(--primary) 8%, var(--surface))" : "var(--surface)", textAlign: "left", cursor: "pointer", transition: "all 0.15s" }}>
-                <p style={{ fontWeight: 700, color: "var(--text)", fontSize: "0.9375rem" }}>{t("planFree")}</p>
-                <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--primary)", margin: "0.375rem 0 0.625rem" }}>0 <span style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{locale === "ar" ? "د.إ" : "AED"}</span></p>
-                <ul style={{ listStyle: "none", padding: 0, margin: 0, color: "var(--text-muted)", fontSize: "0.73rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                  <li>{`✓ 3 ${t("planDays")}`}</li>
-                  <li>{`✓ ${locale === "ar" ? "نص فقط" : "Text only"}`}</li>
-                  <li style={{ color: "var(--danger)" }}>{`✗ ${locale === "ar" ? "بدون صور" : "No images"}`}</li>
-                </ul>
-              </button>
-              {/* NORMAL */}
-              <button onClick={() => { setSelectedPlan("normal"); setSelectedPackage(normalPkg || null); }}
-                style={{ padding: "1rem 0.75rem", borderRadius: "var(--radius-md)", border: `2px solid ${isNormal ? "var(--primary)" : "var(--border)"}`, backgroundColor: isNormal ? "color-mix(in srgb, var(--primary) 8%, var(--surface))" : "var(--surface)", textAlign: "left", cursor: "pointer", transition: "all 0.15s" }}>
-                <p style={{ fontWeight: 700, color: "var(--text)", fontSize: "0.9375rem" }}>{t("planNormal")}</p>
-                <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--primary)", margin: "0.375rem 0 0.625rem" }}>{normalTotal} <span style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{locale === "ar" ? "د.إ" : "AED"}</span></p>
-                <ul style={{ listStyle: "none", padding: 0, margin: 0, color: "var(--text-muted)", fontSize: "0.73rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                  <li>{`✓ 7 ${t("planDays")}`}</li>
-                  <li>{`✓ ${locale === "ar" ? "10 د.إ أساسي" : "10 AED base"}`}</li>
-                  <li>{`✓ ${locale === "ar" ? "+2.5/صورة" : "+2.5/image"}`}</li>
-                  <li>{`✓ ${locale === "ar" ? "حد أقصى 15 د.إ" : "Max 15 AED"}`}</li>
-                </ul>
-              </button>
-              {/* FEATURED */}
-              <button onClick={() => { setSelectedPlan("featured"); setSelectedPackage(featuredPkg || null); }}
-                style={{ padding: "1rem 0.75rem", borderRadius: "var(--radius-md)", border: `2px solid ${isFeaturedPlan ? "var(--primary)" : "var(--border)"}`, backgroundColor: isFeaturedPlan ? "color-mix(in srgb, var(--primary) 8%, var(--surface))" : "var(--surface)", textAlign: "left", cursor: "pointer", transition: "all 0.15s", position: "relative" }}>
-                <span style={{ position: "absolute", top: "0.5rem", right: "0.5rem", fontSize: "0.6rem", fontWeight: 700, backgroundColor: "var(--primary)", color: "#fff", padding: "0.1rem 0.35rem", borderRadius: 999 }}>{locale === "ar" ? "الأفضل" : "Best"}</span>
-                <p style={{ fontWeight: 700, color: "var(--text)", fontSize: "0.9375rem" }}>{t("planFeatured")}</p>
-                <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--primary)", margin: "0.375rem 0 0.625rem" }}>{FEATURED_PRICE} <span style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{locale === "ar" ? "د.إ" : "AED"}</span></p>
-                <ul style={{ listStyle: "none", padding: 0, margin: 0, color: "var(--text-muted)", fontSize: "0.73rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-                  <li>{`✓ 14 ${t("planDays")}`}</li>
-                  <li>{`✓ ${t("pinnedTop")}`}</li>
-                  <li>{`✓ ${t("featuredBadge")}`}</li>
-                  <li>{`✓ ${t("allInclusive")}`}</li>
-                </ul>
-              </button>
+            <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(packages.length + 1, 4)}, 1fr)`, gap: "0.75rem", marginBottom: "1.5rem" }}>
+              {/* All plans: Free (no package) + DB packages, sorted by price */}
+              {[
+                { _isFreeSlot: true, id: "__free__", price: -1, name: "Free", nameAr: locale === "ar" ? t("planFree") : "Free", durationDays: 3, maxImages: 0, isFeatured: false, isPinned: false } as any,
+                ...([...packages].filter((p: Package) => p.price > 0 || p.isFeatured).sort((a: Package, b: Package) => a.price - b.price)),
+              ].map((pkg: any) => {
+                const isFreeSlot = pkg._isFreeSlot === true;
+                const isSelected = isFreeSlot ? isFree : selectedPackage?.id === pkg.id;
+
+                const features: { text: string; ok: boolean }[] = [];
+                features.push({ text: `${pkg.durationDays} ${locale === "ar" ? "أيام" : "days"}`, ok: true });
+                if (isFreeSlot) {
+                  features.push({ text: locale === "ar" ? "نص فقط" : "Text only", ok: true });
+                  features.push({ text: locale === "ar" ? "بدون صور" : "No images", ok: false });
+                } else {
+                  if (pkg.maxImages > 0) features.push({ text: locale === "ar" ? `حتى ${pkg.maxImages} صور` : `Up to ${pkg.maxImages} images`, ok: true });
+                  if (pkg.isFeatured) {
+                    features.push({ text: locale === "ar" ? "مثبّت في الأعلى" : "Pinned at top", ok: true });
+                    features.push({ text: locale === "ar" ? "سعر شامل" : "All-inclusive", ok: true });
+                  } else if (pkg.isPinned) {
+                    features.push({ text: locale === "ar" ? "مثبّت" : "Pinned", ok: true });
+                  }
+                  if (pkg.includesTelegram) features.push({ text: locale === "ar" ? "نشر على تيليغرام" : "Published on Telegram", ok: true });
+                }
+
+                return (
+                  <button key={pkg.id} onClick={() => {
+                    if (isFreeSlot) { setSelectedPlan("free"); setSelectedPackage(null); setPublishPlatforms(prev => prev.filter(p => p === "website" || p === "telegram")); }
+                    else { setSelectedPlan(pkg.isFeatured ? "featured" : "normal"); setSelectedPackage(pkg); }
+                  }}
+                    style={{ padding: "1rem 0.75rem", borderRadius: "var(--radius-md)", border: `2px solid ${isSelected ? "var(--primary)" : "var(--border)"}`, backgroundColor: isSelected ? "color-mix(in srgb, var(--primary) 8%, var(--surface))" : "var(--surface)", textAlign: "start", cursor: "pointer", transition: "all 0.15s", position: "relative", display: "flex", flexDirection: "column", alignItems: "stretch" }}>
+                    {!isFreeSlot && pkg.isFeatured && <span style={{ position: "absolute", top: "0.5rem", insetInlineEnd: "0.5rem", fontSize: "0.6rem", fontWeight: 700, backgroundColor: "var(--primary)", color: "#fff", padding: "0.1rem 0.35rem", borderRadius: 999 }}>{locale === "ar" ? "الأفضل" : "Best"}</span>}
+                    <p style={{ fontWeight: 700, color: "var(--text)", fontSize: "0.9375rem" }}>{locale === "ar" ? pkg.nameAr : pkg.name}</p>
+                    <p style={{ fontSize: "1.5rem", fontWeight: 800, color: "var(--primary)", margin: "0.375rem 0 0.625rem" }}>{isFreeSlot ? 0 : pkg.price} <span style={{ fontSize: "0.8125rem", fontWeight: 600 }}>{locale === "ar" ? "د.إ" : "AED"}</span></p>
+                    <ul style={{ listStyle: "none", padding: 0, margin: 0, marginTop: "auto", color: "var(--text-muted)", fontSize: "0.73rem", display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                      {features.map(f => <li key={f.text} style={f.ok ? {} : { color: "var(--danger)" }}>{f.ok ? "✓" : "✗"} {f.text}</li>)}
+                    </ul>
+                  </button>
+                );
+              })}
             </div>
 
             {/* Price Summary */}
@@ -582,24 +641,10 @@ async function createPayment() {
                     <span style={{ color: "var(--primary)", fontWeight: 700 }}>0 {locale === "ar" ? "د.إ" : "AED"}</span>
                   </div>
                 )}
-                {isNormal && (
-                  <>
-                    <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-muted)" }}>
-                      <span>{locale === "ar" ? "الأساسي (نص)" : "Base (text)"}</span><span>10 {locale === "ar" ? "د.إ" : "AED"}</span>
-                    </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-muted)" }}>
-                      <span>{locale === "ar" ? `صور (${imgCount} × 2.5 د.إ)` : `Images (${imgCount} × 2.5 AED)`}</span><span>{normalImgCost} {locale === "ar" ? "د.إ" : "AED"}</span>
-                    </div>
-                    {(NORMAL_BASE + normalImgCost) > NORMAL_MAX && (
-                      <div style={{ display: "flex", justifyContent: "space-between", color: "var(--primary)", fontSize: "0.75rem" }}>
-                        <span>{locale === "ar" ? "تم تطبيق الحد (15 د.إ)" : "Cap applied (max 15 AED)"}</span><span>−{(NORMAL_BASE + normalImgCost) - NORMAL_MAX} {locale === "ar" ? "د.إ" : "AED"}</span>
-                      </div>
-                    )}
-                  </>
-                )}
-                {isFeaturedPlan && (
+                {!isFree && selectedPackage && (
                   <div style={{ display: "flex", justifyContent: "space-between", color: "var(--text-muted)" }}>
-                    <span>{locale === "ar" ? "مميز — شامل، 14 يوماً" : "Featured — all-inclusive, 14 days"}</span><span>25 {locale === "ar" ? "د.إ" : "AED"}</span>
+                    <span>{locale === "ar" ? selectedPackage.nameAr : selectedPackage.name} — {selectedPackage.durationDays} {locale === "ar" ? "يوماً" : "days"}</span>
+                    <span>{getDisplayTotal()} {locale === "ar" ? "د.إ" : "AED"}</span>
                   </div>
                 )}
                 <div style={{ display: "flex", justifyContent: "space-between", fontWeight: 700, color: "var(--text)", fontSize: "1rem", paddingTop: "0.5rem", borderTop: "1.5px solid var(--border)", marginTop: "0.25rem" }}>

@@ -7,16 +7,16 @@ import Footer from "@/components/Footer";
 import type { Metadata } from "next";
 
 const CATEGORY_IMAGES: Record<string, string> = {
-  vehicles: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=800&q=80",
-  "real-estate": "https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&q=80",
-  electronics: "https://images.unsplash.com/photo-1498049794561-7780e7231661?w=800&q=80",
-  jobs: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=800&q=80",
-  services: "https://images.unsplash.com/photo-1521791136064-7986c2920216?w=800&q=80",
-  salons: "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&q=80",
-  clinics: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=800&q=80",
-  furniture: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&q=80",
-  education: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&q=80",
-  other: "https://images.unsplash.com/photo-1586769852044-692d6e3703f0?w=800&q=80",
+  vehicles: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=800&q=80",
+  "real-estate": "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&q=80",
+  electronics: "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=800&q=80",
+  jobs: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800&q=80",
+  services: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&q=80",
+  salons: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&q=80",
+  clinics: "https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=800&q=80",
+  furniture: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&q=80",
+  education: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&q=80",
+  other: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=800&q=80",
 };
 
 function getCategoryImage(category: string): string {
@@ -60,9 +60,15 @@ export default async function AdPage({ params }: Props) {
     ? adPrice.toLocaleString("en-AE") + " AED · Negotiable"
     : isNegotiable ? "Negotiable" : adPrice ? adPrice.toLocaleString("en-AE") + " AED" : "";
 
-  const contactMethod = ad.contactMethod || (whatsappUrl ? "whatsapp" : "call");
-  const showWhatsApp = (contactMethod === "whatsapp" || contactMethod === "both") && !!whatsappUrl;
-  const showCall = (contactMethod === "call" || contactMethod === "both") && !!ad.contactPhone;
+  const rawMethod = ad.contactMethod || "";
+  const contactMethods = rawMethod
+    ? rawMethod.split(",").map((m: string) => m.trim()).filter(Boolean)
+    : whatsappUrl ? ["whatsapp"] : ["call"];
+  const showWhatsApp  = contactMethods.some((m: string) => m === "whatsapp" || m === "both") && !!whatsappUrl;
+  const showCall      = contactMethods.some((m: string) => m === "call"     || m === "both") && !!ad.contactPhone;
+  const tgUsername    = ((ad as any).telegramUsername || "").replace(/^@/, "");
+  const showTelegram  = contactMethods.includes("telegram") && !!tgUsername;
+  const telegramUrl   = showTelegram ? `https://t.me/${tgUsername}` : null;
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }}>
@@ -135,6 +141,13 @@ export default async function AdPage({ params }: Props) {
                       style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0 1.25rem", height: 46, backgroundColor: "var(--primary)", color: "#fff", borderRadius: "var(--radius-md)", fontWeight: 600, fontSize: "0.9375rem", textDecoration: "none" }}>
                       <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}><path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/></svg>
                       Call
+                    </a>
+                  )}
+                  {showTelegram && (
+                    <a href={telegramUrl!} target="_blank" rel="noopener noreferrer" data-track="telegram" data-ad-id={ad.id}
+                      style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0 1.25rem", height: 46, backgroundColor: "#229ED9", color: "#fff", borderRadius: "var(--radius-md)", fontWeight: 600, fontSize: "0.9375rem", textDecoration: "none" }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                      Telegram
                     </a>
                   )}
                   {isService && ad.bookingEnabled && whatsappUrl && (

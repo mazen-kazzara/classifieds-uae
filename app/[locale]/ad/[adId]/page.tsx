@@ -14,16 +14,16 @@ const CAT_AR: Record<string, string> = {
 };
 
 const CATEGORY_IMAGES: Record<string, string> = {
-  vehicles: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=800&q=80",
-  "real-estate": "https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&q=80",
-  electronics: "https://images.unsplash.com/photo-1498049794561-7780e7231661?w=800&q=80",
-  jobs: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=800&q=80",
-  services: "https://images.unsplash.com/photo-1521791136064-7986c2920216?w=800&q=80",
-  salons: "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&q=80",
-  clinics: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=800&q=80",
-  furniture: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&q=80",
-  education: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&q=80",
-  other: "https://images.unsplash.com/photo-1586769852044-692d6e3703f0?w=800&q=80",
+  vehicles: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=800&q=80",
+  "real-estate": "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&q=80",
+  electronics: "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=800&q=80",
+  jobs: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800&q=80",
+  services: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&q=80",
+  salons: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&q=80",
+  clinics: "https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=800&q=80",
+  furniture: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&q=80",
+  education: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&q=80",
+  other: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=800&q=80",
 };
 
 function getCategoryImage(category: string): string {
@@ -34,10 +34,37 @@ function getCategoryImage(category: string): string {
 interface Props { params: Promise<{ adId: string; locale: string }> }
 
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { adId } = await params;
-  const ad = await prisma.ad.findUnique({ where: { id: decodeURIComponent(adId) }, select: { title: true, description: true, category: true } });
-  if (!ad) return { title: "Ad Not Found" };
-  return { title: ad.title + " | Classifieds UAE", description: ad.description.slice(0, 160) };
+  const { adId, locale } = await params;
+  const isAr = locale === "ar";
+  const ad = await prisma.ad.findUnique({ where: { id: decodeURIComponent(adId) }, include: { media: { orderBy: { position: "asc" }, take: 1 } } });
+  if (!ad) return { title: isAr ? "الإعلان غير موجود" : "Ad Not Found" };
+  const img = ad.media?.[0]?.url;
+  const imageUrl = img ? (img.startsWith("/") ? `https://classifiedsuae.ae${img}` : `https://classifiedsuae.ae/uploads/${img}`) : "https://classifiedsuae.ae/og-image.jpg";
+  const desc = ad.description.replace(/\n/g, " ").slice(0, 160);
+  const title = isAr ? `${ad.title} | CLASSIFIEDS UAE` : `${ad.title} | CLASSIFIEDS UAE`;
+  const url = `https://classifiedsuae.ae/${locale}/ad/${adId}`;
+  return {
+    title,
+    description: desc,
+    openGraph: {
+      title: ad.title || (isAr ? "إعلان" : "Ad"),
+      description: desc,
+      url,
+      images: [{ url: imageUrl }],
+      siteName: "CLASSIFIEDS UAE",
+      locale: isAr ? "ar_AE" : "en_AE",
+      type: "website",
+    },
+    twitter: { card: "summary_large_image", title: ad.title || (isAr ? "إعلان" : "Ad"), description: desc, images: [imageUrl] },
+    alternates: {
+      canonical: url,
+      languages: {
+        en: `https://classifiedsuae.ae/en/ad/${adId}`,
+        ar: `https://classifiedsuae.ae/ar/ad/${adId}`,
+        "x-default": `https://classifiedsuae.ae/en/ad/${adId}`,
+      },
+    },
+  };
 }
 
 export default async function AdPage({ params }: Props) {
@@ -58,7 +85,7 @@ export default async function AdPage({ params }: Props) {
   prisma.ad.update({ where: { id: ad.id }, data: { viewsCount: { increment: 1 } } }).catch(() => {});
 
   const waNumber = ad.whatsappNumber?.replace(/\D/g, "") || "";
-  const waText = encodeURIComponent("Hi, I saw your ad on ClassifiedsUAE: " + (ad.title || ad.description.slice(0, 50)));
+  const waText = encodeURIComponent(locale === "ar" ? "مرحباً، شاهدت إعلانك على CLASSIFIEDS UAE: " + (ad.title || ad.description.slice(0, 50)) : "Hi, I saw your ad on CLASSIFIEDS UAE: " + (ad.title || ad.description.slice(0, 50)));
   const whatsappUrl = waNumber ? "https://wa.me/" + waNumber + "?text=" + waText : null;
 
   const adPrice = (ad as any).adPrice as number | null;
@@ -70,14 +97,55 @@ export default async function AdPage({ params }: Props) {
     ? adPrice.toLocaleString("en-AE") + ` ${currency} · ${negLabel}`
     : isNegotiable ? negLabel : adPrice ? adPrice.toLocaleString("en-AE") + " " + currency : "";
 
-  const contactMethod = ad.contactMethod || (whatsappUrl ? "whatsapp" : "call");
-  const showWhatsApp = (contactMethod === "whatsapp" || contactMethod === "both") && !!whatsappUrl;
-  const showCall = (contactMethod === "call" || contactMethod === "both") && !!ad.contactPhone;
+  // Support both legacy single-value ("whatsapp","call","both") and
+  // comma-separated format ("whatsapp,call","whatsapp,telegram,call") from the bot
+  const rawMethod = ad.contactMethod || "";
+  const contactMethods = rawMethod
+    ? rawMethod.split(",").map((m: string) => m.trim()).filter(Boolean)
+    : whatsappUrl ? ["whatsapp"] : ["call"];
+  const showWhatsApp  = contactMethods.some((m: string) => m === "whatsapp" || m === "both") && !!whatsappUrl;
+  const showCall      = contactMethods.some((m: string) => m === "call"     || m === "both") && !!ad.contactPhone;
+  const tgUsername    = ((ad as any).telegramUsername || "").replace(/^@/, "");
+  const showTelegram  = contactMethods.includes("telegram") && !!tgUsername;
+  const telegramUrl   = showTelegram ? `https://t.me/${tgUsername}` : null;
+
+  const firstImg = ad.media[0];
+  const adImageUrl = firstImg ? (firstImg.url.startsWith("/") ? `https://classifiedsuae.ae${firstImg.url}` : `https://classifiedsuae.ae/uploads/${firstImg.url}`) : null;
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "Product",
+        name: ad.title || "Ad",
+        description: ad.description,
+        category: ad.category,
+        ...(adImageUrl && { image: adImageUrl }),
+        ...(adPrice && {
+          offers: {
+            "@type": "Offer",
+            price: adPrice,
+            priceCurrency: "AED",
+            availability: expired ? "https://schema.org/SoldOut" : "https://schema.org/InStock",
+            url: `https://classifiedsuae.ae/${locale}/ad/${ad.id}`,
+          },
+        }),
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: locale === "ar" ? "الرئيسية" : "Home", item: `https://classifiedsuae.ae/${locale}` },
+          { "@type": "ListItem", position: 2, name: ad.category, item: `https://classifiedsuae.ae/${locale}/category/${ad.category.toLowerCase().replace(/ /g, "-").replace(/&/g, "")}` },
+          { "@type": "ListItem", position: 3, name: ad.title || "Ad" },
+        ],
+      },
+    ],
+  };
 
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }} dir={locale === "ar" ? "rtl" : "ltr"}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Header />
-      <main className="max-w-4xl mx-auto px-4 py-8">
+      <main className="max-w-4xl mx-auto px-4 py-8" style={{ textAlign: locale === "ar" ? "right" : "left" }}>
         {expired && <div style={{ backgroundColor: "color-mix(in srgb, var(--danger) 10%, var(--surface))", border: "1.5px solid var(--danger)", borderRadius: "var(--radius-md)", padding: "0.875rem 1rem", marginBottom: "1rem", color: "var(--danger)", fontSize: "0.875rem", fontWeight: 500 }}>{t("expired")}</div>}
         {offerExpired && <div style={{ backgroundColor: "#FFF7ED", border: "1.5px solid #FDBA74", borderRadius: "var(--radius-md)", padding: "0.875rem 1rem", marginBottom: "1rem", color: "#9A3412", fontSize: "0.875rem", fontWeight: 500 }}>{t("offerEnded")}</div>}
 
@@ -120,7 +188,10 @@ export default async function AdPage({ params }: Props) {
                 );
               }) : (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={getCategoryImage(ad.category)} alt={ad.category} style={{ width: "100%", height: 260, objectFit: "cover", borderRadius: "var(--radius-md)", border: "1.5px solid var(--border)", opacity: 0.75 }} />
+                <div style={{ position: "relative" }}>
+                  <img src={getCategoryImage(ad.category)} alt={ad.category} style={{ width: "100%", height: 260, objectFit: "cover", borderRadius: "var(--radius-md)", border: "1.5px solid var(--border)", opacity: 0.5 }} />
+                  <span style={{ position: "absolute", bottom: "0.5rem", insetInlineEnd: "0.5rem", fontSize: "0.7rem", fontWeight: 600, padding: "0.2rem 0.5rem", borderRadius: 999, backgroundColor: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.75)" }}>{locale === "ar" ? "صورة توضيحية — لا توجد صورة مرفوعة" : "Illustrative — no image uploaded"}</span>
+                </div>
               )}
             </div>
 
@@ -147,6 +218,13 @@ export default async function AdPage({ params }: Props) {
                       {t("call")}
                     </a>
                   )}
+                  {showTelegram && (
+                    <a href={telegramUrl!} target="_blank" rel="noopener noreferrer" data-track="telegram" data-ad-id={ad.id}
+                      style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0 1.25rem", height: 46, backgroundColor: "#229ED9", color: "#fff", borderRadius: "var(--radius-md)", fontWeight: 600, fontSize: "0.9375rem", textDecoration: "none" }}>
+                      <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}><path d="M11.944 0A12 12 0 0 0 0 12a12 12 0 0 0 12 12 12 12 0 0 0 12-12A12 12 0 0 0 12 0a12 12 0 0 0-.056 0zm4.962 7.224c.1-.002.321.023.465.14a.506.506 0 0 1 .171.325c.016.093.036.306.02.472-.18 1.898-.962 6.502-1.36 8.627-.168.9-.499 1.201-.82 1.23-.696.065-1.225-.46-1.9-.902-1.056-.693-1.653-1.124-2.678-1.8-1.185-.78-.417-1.21.258-1.91.177-.184 3.247-2.977 3.307-3.23.007-.032.014-.15-.056-.212s-.174-.041-.249-.024c-.106.024-1.793 1.14-5.061 3.345-.48.33-.913.49-1.302.48-.428-.008-1.252-.241-1.865-.44-.752-.245-1.349-.374-1.297-.789.027-.216.325-.437.893-.663 3.498-1.524 5.83-2.529 6.998-3.014 3.332-1.386 4.025-1.627 4.476-1.635z"/></svg>
+                      {locale === "ar" ? "تيليغرام" : "Telegram"}
+                    </a>
+                  )}
                   {isService && ad.bookingEnabled && whatsappUrl && (
                     <a href={whatsappUrl} target="_blank" rel="noopener noreferrer" data-track="booking" data-ad-id={ad.id}
                       style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", padding: "0 1.25rem", height: 46, backgroundColor: "#7C3AED", color: "#fff", borderRadius: "var(--radius-md)", fontWeight: 600, fontSize: "0.9375rem", textDecoration: "none" }}>
@@ -167,7 +245,7 @@ export default async function AdPage({ params }: Props) {
         </div>
 
         <div style={{ marginTop: "1.5rem", textAlign: "center" }}>
-          <Link href="/" style={{ color: "var(--primary)", textDecoration: "none", fontSize: "0.9375rem", fontWeight: 500 }}>{t("backToListings")}</Link>
+          <Link href={`/${locale}`} style={{ color: "var(--primary)", textDecoration: "none", fontSize: "0.9375rem", fontWeight: 500 }}>{t("backToListings")}</Link>
         </div>
       </main>
       <Footer />

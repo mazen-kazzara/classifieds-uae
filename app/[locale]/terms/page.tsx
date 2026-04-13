@@ -4,7 +4,7 @@ import Footer from "@/components/Footer";
 import { getTranslations } from "@/lib/getTranslations";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Terms of Service | Classifieds UAE" };
+export const metadata: Metadata = { title: "Terms of Service | CLASSIFIEDS UAE" };
 
 const h2Style = { color: "var(--text)", fontWeight: 700 as const, fontSize: "1.0625rem", marginBottom: "0.625rem", marginTop: "2rem", paddingBottom: "0.375rem", borderBottom: "1px solid var(--border)" };
 const pStyle = { marginBottom: "0.875rem" };
@@ -19,7 +19,7 @@ export default async function TermsPage({ params }: Props) {
   const isAr = locale === "ar";
 
   return (
-    <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }}>
+    <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }} dir={isAr ? "rtl" : "ltr"}>
       <Header />
       <main className="max-w-3xl mx-auto px-4 py-12">
         <div style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "2.5rem" }} className="shadow-card">
@@ -30,7 +30,7 @@ export default async function TermsPage({ params }: Props) {
               {isAr ? "شروط الخدمة" : "Terms of Service"}
             </h1>
             <p style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
-              {isAr ? "كلاسيفايدز يو إي | classifiedsuae.ae" : "Classifieds UAE | classifiedsuae.ae"}
+              {isAr ? "CLASSIFIEDS UAE | classifiedsuae.ae" : "CLASSIFIEDS UAE | classifiedsuae.ae"}
             </p>
             <p style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>
               {isAr ? "تاريخ السريان: أبريل 2026 | القانون الحاكم: الإمارات العربية المتحدة" : "Effective Date: April 2026 | Governing Law: United Arab Emirates"}
@@ -42,8 +42,8 @@ export default async function TermsPage({ params }: Props) {
             {/* 1 */}
             <h2 style={h2Style}>{isAr ? "1. قبول الشروط" : "1. Acceptance of Terms"}</h2>
             <p style={pStyle}>{isAr
-              ? 'بالوصول إلى منصة "كلاسيفايدز يو إي" أو استخدامها، بما في ذلك موقع classifiedsuae.ae وقنوات الواتساب والتيليغرام، فإنك تؤكد أنك قرأت هذه الشروط وفهمتها وتوافق على الالتزام بها قانونياً. إذا كنت لا توافق على أي جزء من هذه الشروط، يجب عليك التوقف فوراً عن استخدام المنصة.'
-              : 'By accessing or using Classifieds UAE (the "Platform"), including through our website at classifiedsuae.ae, WhatsApp, or Telegram channels, you confirm that you have read, understood, and agree to be legally bound by these Terms of Service. If you do not agree to any part of these Terms, you must immediately stop using the Platform.'
+              ? 'بالوصول إلى منصة "CLASSIFIEDS UAE" أو استخدامها، بما في ذلك موقع classifiedsuae.ae وقنوات الواتساب والتيليغرام، فإنك تؤكد أنك قرأت هذه الشروط وفهمتها وتوافق على الالتزام بها قانونياً. إذا كنت لا توافق على أي جزء من هذه الشروط، يجب عليك التوقف فوراً عن استخدام المنصة.'
+              : 'By accessing or using CLASSIFIEDS UAE (the "Platform"), including through our website at classifiedsuae.ae, WhatsApp, or Telegram channels, you confirm that you have read, understood, and agree to be legally bound by these Terms of Service. If you do not agree to any part of these Terms, you must immediately stop using the Platform.'
             }</p>
             <p style={pStyle}>{isAr
               ? "تسري هذه الشروط على جميع المستخدمين والمعلنين والزوار للمنصة بغض النظر عن طريقة الوصول."
@@ -53,32 +53,32 @@ export default async function TermsPage({ params }: Props) {
             {/* 2 */}
             <h2 style={h2Style}>{isAr ? "2. وصف المنصة" : "2. Platform Description"}</h2>
             <p style={pStyle}>{isAr
-              ? "كلاسيفايدز يو إي هي منصة إعلانات مبوبة إلكترونية تخدم الإمارات العربية المتحدة، تتيح للمستخدمين نشر إعلانات للمنتجات والخدمات والعروض. قد تُنشر الإعلانات عبر القنوات التالية:"
-              : "Classifieds UAE is an online classified advertising platform serving the United Arab Emirates. It allows users to post ads for products, services, and offers. Ads may be published across the following channels:"
+              ? "CLASSIFIEDS UAE هي منصة إعلانات مبوبة إلكترونية تخدم الإمارات العربية المتحدة، تتيح للمستخدمين نشر إعلانات للمنتجات والخدمات والعروض. قد تُنشر الإعلانات عبر القنوات التالية:"
+              : "CLASSIFIEDS UAE is an online classified advertising platform serving the United Arab Emirates. It allows users to post ads for products, services, and offers. Ads may be published across the following channels:"
             }</p>
             <ul style={ulStyle}>
               {isAr ? <>
-                <li>موقع كلاسيفايدز يو إي (classifiedsuae.ae)</li>
-                <li>صفحة فيسبوك الرسمية لكلاسيفايدز يو إي</li>
-                <li>حساب إنستغرام الرسمي لكلاسيفايدز يو إي</li>
-                <li>قناة واتساب الرسمية لكلاسيفايدز يو إي</li>
-                <li>قناة تيليغرام الرسمية لكلاسيفايدز يو إي</li>
+                <li><a href="https://classifiedsuae.ae" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>موقع CLASSIFIEDS UAE (classifiedsuae.ae)</a></li>
+                <li><a href="https://facebook.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>صفحة فيسبوك الرسمية لCLASSIFIEDS UAE</a></li>
+                <li><a href="https://instagram.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>حساب إنستغرام الرسمي لCLASSIFIEDS UAE</a></li>
+                <li><a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>قناة واتساب الرسمية لCLASSIFIEDS UAE</a></li>
+                <li><a href="https://t.me/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>قناة تيليغرام الرسمية لCLASSIFIEDS UAE</a></li>
               </> : <>
-                <li>The Classifieds UAE website (classifiedsuae.ae)</li>
-                <li>Official Classifieds UAE Facebook Page</li>
-                <li>Official Classifieds UAE Instagram Account</li>
-                <li>Official Classifieds UAE WhatsApp Channel</li>
-                <li>Official Classifieds UAE Telegram Channel</li>
+                <li><a href="https://classifiedsuae.ae" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>CLASSIFIEDS UAE website (classifiedsuae.ae)</a></li>
+                <li><a href="https://facebook.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official CLASSIFIEDS UAE Facebook Page</a></li>
+                <li><a href="https://instagram.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official CLASSIFIEDS UAE Instagram Account</a></li>
+                <li><a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official CLASSIFIEDS UAE WhatsApp Channel</a></li>
+                <li><a href="https://t.me/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official CLASSIFIEDS UAE Telegram Channel</a></li>
               </>}
             </ul>
 
             {/* 3 */}
             <h2 style={h2Style}>{isAr ? "3. إخلاء المسؤولية — دور المنصة" : "3. Disclaimer of Liability — Platform Role"}</h2>
             <div style={boxStyle}>{isAr
-              ? "هام: كلاسيفايدز يو إي هي منصة إعلانية محايدة فقط. لا نقوم بإنشاء أو التحقق أو تأييد أو تحمّل أي مسؤولية عن أي محتوى ينشئه المستخدمون. يتحمل المعلن وحده المسؤولية القانونية الكاملة عن محتوى إعلانه ودقته وقانونيته."
-              : "IMPORTANT: Classifieds UAE is a neutral advertising platform only. We do not create, verify, endorse, or take responsibility for any user-generated content. The advertiser bears sole and full legal responsibility for the content, accuracy, and legality of their ad."
+              ? "هام: CLASSIFIEDS UAE هي منصة إعلانية محايدة فقط. لا نقوم بإنشاء أو التحقق أو تأييد أو تحمّل أي مسؤولية عن أي محتوى ينشئه المستخدمون. يتحمل المعلن وحده المسؤولية القانونية الكاملة عن محتوى إعلانه ودقته وقانونيته."
+              : "IMPORTANT: CLASSIFIEDS UAE is a neutral advertising platform only. We do not create, verify, endorse, or take responsibility for any user-generated content. The advertiser bears sole and full legal responsibility for the content, accuracy, and legality of their ad."
             }</div>
-            <p style={pStyle}>{isAr ? "تخلي كلاسيفايدز يو إي صراحةً مسؤوليتها عن:" : "Classifieds UAE expressly disclaims all liability for:"}</p>
+            <p style={pStyle}>{isAr ? "تخلي CLASSIFIEDS UAE صراحةً مسؤوليتها عن:" : "CLASSIFIEDS UAE expressly disclaims all liability for:"}</p>
             <ul style={ulStyle}>
               {isAr ? <>
                 <li>أي محتوى إعلاني يخالف قوانين الإمارات الاتحادية أو المحلية</li>
@@ -144,8 +144,8 @@ export default async function TermsPage({ params }: Props) {
               </>}
             </ul>
             <div style={warningStyle}>{isAr
-              ? "تتحمل كلاسيفايدز يو إي صفر مسؤولية قانونية عن أي محتوى محظور ينشره المستخدمون. المعلن وحده يخضع للتبعات القانونية الإماراتية عن المخالفات."
-              : "Classifieds UAE bears zero legal responsibility for any prohibited content posted by users. The advertiser alone is subject to UAE legal consequences for violations."
+              ? "تتحمل CLASSIFIEDS UAE صفر مسؤولية قانونية عن أي محتوى محظور ينشره المستخدمون. المعلن وحده يخضع للتبعات القانونية الإماراتية عن المخالفات."
+              : "CLASSIFIEDS UAE bears zero legal responsibility for any prohibited content posted by users. The advertiser alone is subject to UAE legal consequences for violations."
             }</div>
 
             {/* 5 */}
@@ -207,21 +207,21 @@ export default async function TermsPage({ params }: Props) {
                 <li>تُحصّل جميع الرسوم بالدرهم الإماراتي.</li>
                 <li>رسوم الخطط المدفوعة غير قابلة للاسترداد بعد نشر الإعلان على المنصة.</li>
                 <li>في حالة حدوث خطأ تقني يمنع النشر، سيُقدَّم استرداد كامل أو إعادة نشر وفق تفضيل المعلن.</li>
-                <li>تحتفظ كلاسيفايدز يو إي بالحق في إزالة إعلان مدفوع دون استرداد إذا انتهك هذه الشروط.</li>
+                <li>تحتفظ CLASSIFIEDS UAE بالحق في إزالة إعلان مدفوع دون استرداد إذا انتهك هذه الشروط.</li>
               </> : <>
                 <li>All payments are processed securely through Ziina payment gateway.</li>
                 <li>All fees are charged in UAE Dirhams (AED).</li>
                 <li>All paid plan fees are non-refundable once the ad has been published on the Platform.</li>
                 <li>If a technical error prevents publication, a full refund or re-publication will be offered at the advertiser&apos;s discretion.</li>
-                <li>Classifieds UAE reserves the right to remove a paid ad without refund if it violates these Terms.</li>
+                <li>CLASSIFIEDS UAE reserves the right to remove a paid ad without refund if it violates these Terms.</li>
               </>}
             </ul>
 
             {/* 8 */}
             <h2 style={h2Style}>{isAr ? "8. حقوق المنصة وإزالة المحتوى" : "8. Platform Rights & Content Removal"}</h2>
             <p style={pStyle}>{isAr
-              ? "تحتفظ كلاسيفايدز يو إي بالحق، وفق تقديرها المطلق ودون إشعار مسبق، في:"
-              : "Classifieds UAE reserves the right, at its sole discretion and without prior notice, to:"
+              ? "تحتفظ CLASSIFIEDS UAE بالحق، وفق تقديرها المطلق ودون إشعار مسبق، في:"
+              : "CLASSIFIEDS UAE reserves the right, at its sole discretion and without prior notice, to:"
             }</p>
             <ul style={ulStyle}>
               {isAr ? <>
@@ -240,8 +240,8 @@ export default async function TermsPage({ params }: Props) {
             {/* 9 */}
             <h2 style={h2Style}>{isAr ? "9. تحديد المسؤولية" : "9. Limitation of Liability"}</h2>
             <div style={warningStyle}>{isAr
-              ? "الحد الأقصى للمسؤولية: لن تتجاوز المسؤولية الإجمالية لكلاسيفايدز يو إي تجاه أي مستخدم، بصرف النظر عن سبب الدعوى، 500 درهم إماراتي (خمسمائة درهم). باستخدام هذه المنصة، فإنك تتنازل صراحةً وبشكل لا رجعة فيه عن أي حق في المطالبة بتعويضات تتجاوز هذا المبلغ من كلاسيفايدز يو إي أو مالكيها أو موظفيها أو وكلائها."
-              : "MAXIMUM LIABILITY CAP: In no event shall Classifieds UAE's total liability to any user exceed AED 500 (Five Hundred UAE Dirhams). By using this Platform, you expressly and irrevocably waive any right to claim damages beyond this amount from Classifieds UAE, its owners, employees, or agents."
+              ? "الحد الأقصى للمسؤولية: لن تتجاوز المسؤولية الإجمالية لCLASSIFIEDS UAE تجاه أي مستخدم، بصرف النظر عن سبب الدعوى، 500 درهم إماراتي (خمسمائة درهم). باستخدام هذه المنصة، فإنك تتنازل صراحةً وبشكل لا رجعة فيه عن أي حق في المطالبة بتعويضات تتجاوز هذا المبلغ من CLASSIFIEDS UAE أو مالكيها أو موظفيها أو وكلائها."
+              : "MAXIMUM LIABILITY CAP: In no event shall CLASSIFIEDS UAE's total liability to any user exceed AED 500 (Five Hundred UAE Dirhams). By using this Platform, you expressly and irrevocably waive any right to claim damages beyond this amount from CLASSIFIEDS UAE, its owners, employees, or agents."
             }</div>
 
             {/* 10 */}
@@ -255,13 +255,19 @@ export default async function TermsPage({ params }: Props) {
             <h2 style={h2Style}>{isAr ? "11. التواصل معنا" : "11. Contact"}</h2>
             <ul style={ulStyle}>
               {isAr ? <>
-                <li>الموقع: classifiedsuae.ae</li>
-                <li>تيليغرام: القناة الرسمية لكلاسيفايدز يو إي</li>
-                <li>واتساب: الرقم الرسمي لكلاسيفايدز يو إي</li>
+                <li>{isAr ? "الموقع" : "Website"}: <a href="https://classifiedsuae.ae" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuae.ae</a></li>
+                <li>{isAr ? "البريد الإلكتروني" : "Email"}: <a href="mailto:info@classifiedsuae.ae" style={{ color: "var(--primary)", textDecoration: "none" }}>info@classifiedsuae.ae</a></li>
+                <li>{isAr ? "فيسبوك" : "Facebook"}: <a href="https://facebook.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
+                <li>{isAr ? "إنستغرام" : "Instagram"}: <a href="https://instagram.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
+                <li>{isAr ? "تيليغرام" : "Telegram"}: <a href="https://t.me/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>{isAr ? "القناة الرسمية" : "Official Channel"}</a></li>
+                <li>{isAr ? "واتساب" : "WhatsApp"}: <a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>{isAr ? "القناة الرسمية" : "Official Channel"}</a></li>
               </> : <>
-                <li>Website: classifiedsuae.ae</li>
-                <li>Telegram: Official Classifieds UAE channel</li>
-                <li>WhatsApp: Official Classifieds UAE number</li>
+                <li>Website: <a href="https://classifiedsuae.ae" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuae.ae</a></li>
+                <li>Email: <a href="mailto:info@classifiedsuae.ae" style={{ color: "var(--primary)", textDecoration: "none" }}>info@classifiedsuae.ae</a></li>
+                <li>Facebook: <a href="https://facebook.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
+                <li>Instagram: <a href="https://instagram.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
+                <li>Telegram: <a href="https://t.me/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official Channel</a></li>
+                <li>WhatsApp: <a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official Channel</a></li>
               </>}
             </ul>
 

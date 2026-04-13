@@ -2,6 +2,8 @@ import { NextResponse } from "next/server";
 import { PrismaClient } from "@prisma/client";
 import type { NextRequest } from "next/server";
 import crypto from "crypto";
+import { publishToSocial } from "@/lib/social-publisher";
+import { generateAdId } from "@/lib/ad-id";
 
 const prisma = new PrismaClient();
 
@@ -86,6 +88,7 @@ export async function POST(req: NextRequest) {
 
       const ad = await tx.ad.create({
         data: {
+          id: generateAdId(),
           submissionId: submission.id,
           title: submission.title || rawText.split(/\s+/).slice(0, 6).join(" "),
           description: rawText,
@@ -94,6 +97,7 @@ export async function POST(req: NextRequest) {
           contactPhone: submission.contactPhone,
           whatsappNumber: submission.whatsappNumber,
           telegramChatId: submission.telegramChatId,
+          telegramUsername: (submission as any).telegramUsername || undefined,
           contactEmail: submission.contactEmail,
           contactMethod: submission.contactMethod,
           bookingEnabled: submission.bookingEnabled,
@@ -117,8 +121,21 @@ export async function POST(req: NextRequest) {
 
       return {
         alreadyProcessed: false,
-        submission: { id: submission.id, phone: submission.phone, telegramChatId: submission.telegramChatId ?? null },
+        submission: {
+          id:             submission.id,
+          phone:          submission.phone,
+          telegramChatId: submission.telegramChatId ?? null,
+          contactMethod:  (submission as any).contactMethod  ?? null,
+          whatsappNumber: (submission as any).whatsappNumber ?? null,
+          contactPhone:   submission.contactPhone  ?? null,
+          adPrice:        (submission as any).adPrice        ?? null,
+          isNegotiable:   (submission as any).isNegotiable   ?? false,
+          text:           submission.text ?? "",
+          publishTarget:  (submission as any).publishTarget  ?? "website",
+          telegramUsername: (submission as any).telegramUsername ?? null,
+        },
         ad: { id: ad.id, title: ad.title || "Ad", status: ad.status, expiresAt: ad.expiresAt, isFeatured, category: ad.category },
+        mediaUrls: tempMedia.map(m => normalizeMediaUrl(m.tempKey)),
       };
     });
 
@@ -127,29 +144,133 @@ export async function POST(req: NextRequest) {
     const adUrl = `${process.env.APP_URL}/ad/${result.ad!.id}`;
     const adTitle = result.ad!.title;
 
-    // Notify user via Telegram DM
+    const APP_URL = process.env.APP_URL || "https://classifiedsuae.ae";
+    const webhookPubTarget = result.submission?.publishTarget || "";
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    const subObj = result.submission!;
+    const adObj = result.ad!;
+
+    // ── Publish to Telegram channel (with image) ─────────────────────────────
     try {
-      const chatId = result.submission!.telegramChatId;
-      if (chatId) {
-        await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
+      if (TELEGRAM_CHANNEL_ID && botToken && webhookPubTarget.includes("telegram")) {
+        const methods  = subObj.contactMethod
+          ? subObj.contactMethod.split(",").map((m: string) => m.trim())
+          : ["call"];
+        const waNumber  = (subObj.whatsappNumber || subObj.phone || "").replace(/\D/g, "");
+        const callPhone = (subObj.phone || "").replace(/\D/g, "");
+        const hasWA     = methods.includes("whatsapp") && !!waNumber;
+        const hasCall   = methods.includes("call")     && !!callPhone;
+        const hasTg     = methods.includes("telegram");
+
+        const priceVal = subObj.adPrice;
+        const isNeg = subObj.isNegotiable;
+        const priceLine = priceVal
+          ? `\n💰 ${Number(priceVal).toLocaleString("en-AE")} AED${isNeg ? " · Negotiable" : ""}`
+          : isNeg ? "\n💰 Negotiable" : "";
+
+        const desc = (subObj.text || "").slice(0, 700);
+        const ellipsis = (subObj.text?.length ?? 0) > 700 ? "..." : "";
+        const callLine = hasCall ? `\n📞 +${callPhone}` : "";
+        const channelText = `📢 ${adTitle}\n🗂 ${adObj.category}${priceLine}${callLine}\n\n${desc}${ellipsis}\n\n🔗 ${adUrl}`;
+
+        const tgUsername = subObj.telegramUsername || "";
+        const buttons: { text: string; url: string }[] = [];
+        if (hasWA)  buttons.push({ text: "💬 WhatsApp", url: `https://wa.me/${waNumber}` });
+        if (hasTg && tgUsername) buttons.push({ text: "✈️ Telegram", url: `https://t.me/${tgUsername}` });
+        buttons.push({ text: "🔗 View Ad", url: adUrl });
+        const replyMarkup = { inline_keyboard: [buttons] };
+
+        // Try sendPhoto if images exist
+        const firstMediaUrl = result.mediaUrls?.[0] ?? null;
+        const photoUrl = firstMediaUrl ? `${APP_URL}${firstMediaUrl}` : null;
+        let sent = false;
+
+        if (photoUrl) {
+          const tgRes = await fetch(`https://api.telegram.org/bot${botToken}/sendPhoto`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: TELEGRAM_CHANNEL_ID, photo: photoUrl, caption: channelText.slice(0, 1024), reply_markup: replyMarkup }),
+          }).catch(() => null);
+          const tgJson = await tgRes?.json().catch(() => null);
+          if (tgJson?.ok) {
+            console.log("WEBHOOK CHANNEL sendPhoto OK, message_id=", tgJson?.result?.message_id);
+            sent = true;
+          } else {
+            console.error("WEBHOOK CHANNEL sendPhoto failed:", JSON.stringify(tgJson));
+          }
+        }
+
+        if (!sent) {
+          const tgRes2 = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ chat_id: TELEGRAM_CHANNEL_ID, text: channelText, reply_markup: replyMarkup }),
+          }).catch(() => null);
+          const tgJson2 = await tgRes2?.json().catch(() => null);
+          if (!tgJson2?.ok) {
+            console.error("WEBHOOK CHANNEL sendMessage failed:", JSON.stringify(tgJson2));
+          } else {
+            console.log("WEBHOOK CHANNEL sendMessage OK, message_id=", tgJson2?.result?.message_id);
+          }
+        }
+      }
+    } catch (e) { console.error("TELEGRAM CHANNEL PUBLISH FAILED:", e); }
+
+    // ── Publish to Facebook + Instagram ──────────────────────────────────────
+    let facebookUrl: string | null = null;
+    let instagramUrl: string | null = null;
+    try {
+      const pubFacebook  = webhookPubTarget.includes("facebook");
+      const pubInstagram = webhookPubTarget.includes("instagram");
+
+      if (pubFacebook || pubInstagram) {
+        const firstUrl = result.mediaUrls?.[0] ?? null;
+        const imageUrl = firstUrl ? `${APP_URL}${firstUrl}` : null;
+        const methodStr2 = subObj.contactMethod || "";
+        const methods2 = methodStr2 ? methodStr2.split(",").map((m: string) => m.trim()) : [];
+        const phone2 = (subObj.contactPhone || subObj.phone || "").replace(/\D/g, "");
+        const waNum2 = (subObj.whatsappNumber || "").replace(/\D/g, "");
+        const contactLines2: string[] = [];
+        if (methods2.includes("call") && phone2) contactLines2.push(`📞 +${phone2}`);
+        if (methods2.includes("whatsapp") && waNum2) contactLines2.push(`💬 wa.me/${waNum2}`);
+        if (methods2.includes("telegram")) contactLines2.push(`✈️ Telegram`);
+
+        const socialResult = await publishToSocial({
+          title: adTitle,
+          description: subObj.text || "",
+          category: adObj.category,
+          adUrl,
+          imageUrl,
+          adPrice: subObj.adPrice ?? null,
+          isNegotiable: subObj.isNegotiable ?? false,
+          contactLines: contactLines2,
+          publishFacebook: pubFacebook,
+          publishInstagram: pubInstagram,
+        });
+        facebookUrl = socialResult.facebookUrl || null;
+        instagramUrl = socialResult.instagramUrl || null;
+      }
+    } catch (e) { console.error("SOCIAL PUBLISH ERROR (webhook):", e); }
+
+    // ── Notify user via Telegram DM with all links ───────────────────────────
+    try {
+      const chatId = subObj.telegramChatId;
+      if (chatId && botToken) {
+        const links: string[] = [];
+        if (webhookPubTarget.includes("website")) links.push(`🌍 Website:\n${adUrl}`);
+        if (facebookUrl)  links.push(`📘 Facebook:\n${facebookUrl}`);
+        if (instagramUrl) links.push(`📷 Instagram:\n${instagramUrl}`);
+        if (webhookPubTarget.includes("telegram")) links.push(`📱 Telegram Channel`);
+
+        const dmText = `✅ Your ad is live!\n\n📌 ${adTitle}\n\n🔗 Your ad links:\n${links.join("\n\n")}\n\nThank you for using Classifieds UAE.\nUse /start to post a new ad.`;
+
+        await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: chatId, text: `✅ Your ad is live!\n\n📌 ${adTitle}\n🔗 ${adUrl}`, disable_web_page_preview: false }),
+          body: JSON.stringify({ chat_id: chatId, text: dmText, disable_web_page_preview: false }),
         });
       }
     } catch (e) { console.error("TELEGRAM DM FAILED:", e); }
-
-    // Publish to Telegram channel if configured
-    try {
-      if (TELEGRAM_CHANNEL_ID) {
-        const channelText = `📢 New Ad: ${adTitle}\n\n${result.ad!.category}\n\n🔗 ${adUrl}`;
-        await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ chat_id: TELEGRAM_CHANNEL_ID, text: channelText, disable_web_page_preview: false }),
-        });
-      }
-    } catch (e) { console.error("TELEGRAM CHANNEL PUBLISH FAILED:", e); }
 
     return NextResponse.json({ ok: true, paymentStatus: "SUCCESS", adId: result.ad!.id });
   } catch (err: any) {

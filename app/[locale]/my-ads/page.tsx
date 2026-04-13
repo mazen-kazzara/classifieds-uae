@@ -29,6 +29,7 @@ export default function MyAdsPage() {
   }, [status, router]);
 
   const phone = (session?.user as any)?.phone;
+  const displayName = session?.user?.name || session?.user?.email || (phone ? `+${phone}` : "");
 
   function daysLeft(expiresAt: string) {
     const diff = new Date(expiresAt).getTime() - Date.now();
@@ -46,7 +47,7 @@ export default function MyAdsPage() {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
           <div>
             <h1 style={{ color: "var(--text)", fontWeight: 800, fontSize: "1.5rem", marginBottom: "0.25rem" }}>{t("title")}</h1>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>{locale === "ar" ? "مسجّل الدخول بـ" : "Logged in as"} <strong style={{ color: "var(--text)" }}>+{phone}</strong></p>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>{locale === "ar" ? "مسجّل الدخول بـ" : "Logged in as"} <strong style={{ color: "var(--text)" }}>{displayName}</strong></p>
           </div>
           <div style={{ display: "flex", gap: "0.75rem" }}>
             <Link href="/new" className="btn-primary" style={{ height: 40, padding: "0 1rem", fontSize: "0.875rem" }}>{locale === "ar" ? "+ نشر إعلان" : "+ Post Ad"}</Link>
@@ -71,12 +72,12 @@ export default function MyAdsPage() {
                       {ad.isFeatured && <span style={{ fontSize: "0.65rem", fontWeight: 700, backgroundColor: "var(--primary)", color: "#fff", padding: "0.1rem 0.4rem", borderRadius: 999 }}>FEATURED</span>}
                       <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{locale === "ar" ? (CAT_AR[ad.category.toLowerCase().replace(/ /g,"-")] || ad.category) : ad.category}</span>
                     </div>
-                    <p style={{ color: "var(--text)", fontWeight: 600, fontSize: "0.9375rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ad.title || "(No title)"}</p>
+                    <p style={{ color: "var(--text)", fontWeight: 600, fontSize: "0.9375rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ad.title || (locale === "ar" ? "(بدون عنوان)" : "(No title)")}</p>
                     <p style={{ color: expiring ? "var(--danger)" : "var(--text-muted)", fontSize: "0.75rem", marginTop: "0.25rem", fontWeight: expiring ? 600 : 400 }}>
                       {days === 0 ? (locale === "ar" ? "ينتهي اليوم" : "Expires today") : days === 1 ? (locale === "ar" ? "ينتهي غداً" : "Expires tomorrow") : locale === "ar" ? `${days} أيام متبقية` : `${days} days left`}
                     </p>
                   </div>
-                  <Link href={`/ad/${ad.id}`} className="btn-secondary" style={{ height: 36, padding: "0 0.875rem", fontSize: "0.8125rem", flexShrink: 0 }}>{locale === "ar" ? "عرض" : "View"}</Link>
+                  <Link href={`/${locale}/ad/${ad.id}`} className="btn-secondary" style={{ height: 36, padding: "0 0.875rem", fontSize: "0.8125rem", flexShrink: 0 }}>{locale === "ar" ? "عرض" : "View"}</Link>
                 </div>
               );
             })}

@@ -14,22 +14,41 @@ import Footer from "@/components/Footer";
 import { getTranslations } from "@/lib/getTranslations";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = {
-  title: "Classifieds UAE — Buy, Sell & Find Services in UAE",
-  description: "Post free classified ads in UAE. Vehicles, real estate, electronics, jobs, services and more.",
-};
+export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
+  const { locale } = await params;
+  const isAr = locale === "ar";
+  return {
+    title: isAr
+      ? "CLASSIFIEDS UAE — بيع، شراء وخدمات في الإمارات"
+      : "CLASSIFIEDS UAE — Buy, Sell & Find Services in UAE",
+    description: isAr
+      ? "انشر إعلانات مبوبة مجانية في الإمارات. سيارات، عقارات، إلكترونيات، وظائف، خدمات والمزيد. كل ما تحتاجه في مكان واحد."
+      : "Post free classified ads in UAE. Vehicles, real estate, electronics, jobs, services and more. Cars, property, phones, furniture — everything in one place.",
+    keywords: isAr
+      ? ["إعلانات الإمارات", "بيع وشراء الإمارات", "إعلانات مبوبة دبي", "سوق الإمارات", "سيارات للبيع الإمارات", "عقارات الإمارات", "وظائف الإمارات"]
+      : ["classifieds UAE", "buy sell UAE", "classified ads Dubai", "UAE marketplace", "sell online UAE", "free ads UAE", "cars for sale UAE", "real estate UAE", "jobs UAE"],
+    alternates: {
+      canonical: `https://classifiedsuae.ae/${locale}`,
+      languages: {
+        "en": "https://classifiedsuae.ae/en",
+        "ar": "https://classifiedsuae.ae/ar",
+        "x-default": "https://classifiedsuae.ae/en",
+      },
+    },
+  };
+}
 
 const CATEGORY_IMAGES: Record<string, string> = {
-  vehicles: "https://images.unsplash.com/photo-1568605117036-5fe5e7bab0b7?w=800&q=80",
-  "real-estate": "https://images.unsplash.com/photo-1560518883-ce09059eeffa?w=800&q=80",
-  electronics: "https://images.unsplash.com/photo-1498049794561-7780e7231661?w=800&q=80",
-  jobs: "https://images.unsplash.com/photo-1507679799987-c73779587ccf?w=800&q=80",
-  services: "https://images.unsplash.com/photo-1521791136064-7986c2920216?w=800&q=80",
-  salons: "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&q=80",
-  clinics: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=800&q=80",
-  furniture: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&q=80",
-  education: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&q=80",
-  other: "https://images.unsplash.com/photo-1586769852044-692d6e3703f0?w=800&q=80",
+  vehicles: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=800&q=80",
+  "real-estate": "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&q=80",
+  electronics: "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=800&q=80",
+  jobs: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800&q=80",
+  services: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&q=80",
+  salons: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&q=80",
+  clinics: "https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=800&q=80",
+  furniture: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&q=80",
+  education: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&q=80",
+  other: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=800&q=80",
 };
 
 function getCategoryImage(category: string): string {
@@ -37,45 +56,98 @@ function getCategoryImage(category: string): string {
   return CATEGORY_IMAGES[slug] || CATEGORY_IMAGES["other"];
 }
 
-const ICONS: Record<string, string> = {
-  vehicles: "🚗", "real-estate": "🏠", electronics: "💻", jobs: "💼",
-  services: "🔧", salons: "💈", clinics: "🏥", furniture: "🛋️", education: "📚", other: "📦",
+const CATEGORY_THUMBS: Record<string, string> = {
+  vehicles: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=800&q=80",
+  "real-estate": "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400&h=400&fit=crop&q=80",
+  electronics: "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=400&h=400&fit=crop&q=80",
+  jobs: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=400&h=400&fit=crop&q=80",
+  services: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=400&fit=crop&q=80",
+  salons: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=400&h=400&fit=crop&q=80",
+  clinics: "https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=400&h=400&fit=crop&q=80",
+  furniture: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=400&fit=crop&q=80",
+  education: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=400&h=400&fit=crop&q=80",
+  other: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=400&h=400&fit=crop&q=80",
 };
 
 export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const t = getTranslations(locale, "home");
   const now = new Date();
-  const [categories, featuredAds, latestAds, activeOffers] = await Promise.all([
+  const [categories, featuredAds, latestAds, activeOffers, bannerSetting] = await Promise.all([
     prisma.category.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
     prisma.ad.findMany({ where: { status: "PUBLISHED", isFeatured: true, expiresAt: { gt: now } }, orderBy: { publishedAt: "desc" }, take: 6, include: { media: { orderBy: { position: "asc" }, take: 1 } } }),
     prisma.ad.findMany({ where: { status: "PUBLISHED", contentType: { in: ["ad","service"] }, expiresAt: { gt: now } }, orderBy: { publishedAt: "desc" }, take: 12, include: { media: { orderBy: { position: "asc" }, take: 1 } } }),
     prisma.ad.findMany({ where: { status: "PUBLISHED", contentType: "offer", expiresAt: { gt: now }, offerEndDate: { gt: now } }, orderBy: { publishedAt: "desc" }, take: 6, include: { media: { orderBy: { position: "asc" }, take: 1 } } }),
+    prisma.siteSetting.findUnique({ where: { key: "hero_banner" } }),
   ]);
+  const bannerUrl = bannerSetting?.value || null;
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@graph": [
+      {
+        "@type": "WebSite",
+        name: "Classifieds UAE",
+        url: "https://classifiedsuae.ae",
+        description: "UAE's fastest classified ads platform. Buy, sell & advertise.",
+        inLanguage: ["en", "ar"],
+        potentialAction: {
+          "@type": "SearchAction",
+          target: { "@type": "EntryPoint", urlTemplate: "https://classifiedsuae.ae/en/search?q={search_term_string}" },
+          "query-input": "required name=search_term_string",
+        },
+      },
+      {
+        "@type": "Organization",
+        name: "Classifieds UAE",
+        url: "https://classifiedsuae.ae",
+        logo: "https://classifiedsuae.ae/Classifieds_uae_jpg.jpeg",
+        sameAs: [
+          "https://facebook.com/classifiedsuaeofficial",
+          "https://instagram.com/classifiedsuaeofficial",
+          "https://www.threads.com/@classifiedsuaeofficial",
+          "https://t.me/classifiedsuaeofficial",
+        ],
+        contactPoint: { "@type": "ContactPoint", contactType: "customer service", availableLanguage: ["English", "Arabic"] },
+      },
+      {
+        "@type": "BreadcrumbList",
+        itemListElement: [
+          { "@type": "ListItem", position: 1, name: "Home", item: `https://classifiedsuae.ae/${locale}` },
+        ],
+      },
+    ],
+  };
 
   return (
-    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh" }}>
+    <div style={{ backgroundColor: "var(--bg)", minHeight: "100vh" }} dir={locale === "ar" ? "rtl" : "ltr"}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Header />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-8 space-y-12">
 
         {/* Hero */}
-        <section style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)" }} className="p-8 text-center shadow-card">
-          <h1 style={{ color: "var(--text)" }} className="text-3xl sm:text-4xl font-extrabold mb-3">
-            {t("hero")}
-          </h1>
-          <p style={{ color: "var(--text-muted)" }} className="mb-8 text-base max-w-lg mx-auto">
-            {t("heroSub")}
-          </p>
-          <div className="flex flex-col sm:flex-row gap-3 justify-center items-stretch sm:items-center">
-            <Link href="/new?type=ad" className="btn-primary justify-center" style={{ minWidth: 160, height: 48, fontSize: "0.9375rem" }}>
-              {`📢 ${t("postAd")}`}
-            </Link>
-            <Link href="/new?type=offer" className="btn-secondary justify-center" style={{ minWidth: 160, height: 48, fontSize: "0.9375rem" }}>
-              {`🔥 ${t("postOffer")}`}
-            </Link>
-            <Link href="/new?type=service" className="btn-secondary justify-center" style={{ minWidth: 160, height: 48, fontSize: "0.9375rem" }}>
-              {`🛠️ ${t("postService")}`}
-            </Link>
+        <section style={{
+          backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden",
+          ...(bannerUrl ? { backgroundImage: `url(${bannerUrl})`, backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" } : {}),
+        }} className="shadow-card">
+          <div className="p-8 text-center" style={bannerUrl ? { backgroundColor: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)" } : {}}>
+            <h1 style={{ color: bannerUrl ? "#fff" : "var(--text)" }} className="text-3xl sm:text-4xl font-extrabold mb-3">
+              {t("hero")}
+            </h1>
+            <p style={{ color: bannerUrl ? "rgba(255,255,255,0.85)" : "var(--text-muted)" }} className="mb-8 text-base max-w-lg mx-auto">
+              {t("heroSub")}
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 justify-center items-stretch sm:items-center">
+              <Link href={`/${locale}/new?type=ad`} className="btn-primary justify-center" style={{ minWidth: 160, height: 48, fontSize: "0.9375rem" }}>
+                {t("postAd")}
+              </Link>
+              <Link href={`/${locale}/new?type=offer`} className="btn-secondary justify-center" style={{ minWidth: 160, height: 48, fontSize: "0.9375rem" }}>
+                {t("postOffer")}
+              </Link>
+              <Link href={`/${locale}/new?type=service`} className="btn-secondary justify-center" style={{ minWidth: 160, height: 48, fontSize: "0.9375rem" }}>
+                {t("postService")}
+              </Link>
+            </div>
           </div>
         </section>
 
@@ -85,11 +157,14 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
             <h2 style={{ color: "var(--text)" }} className="text-xl font-bold mb-4">{t("browseCategories")}</h2>
             <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-3">
               {categories.map((cat) => (
-                <Link key={cat.id} href={`/category/${cat.slug}`}
-                  style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-md)" }}
-                  className="flex flex-col items-center gap-1.5 p-3 hover:border-[var(--primary)] transition-colors text-center group">
-                  <span className="text-2xl">{ICONS[cat.slug] ?? "📦"}</span>
-                  <span style={{ color: "var(--text-muted)" }} className="text-xs font-medium group-hover:text-[var(--primary)] transition-colors leading-tight">{locale === "ar" ? (CAT_AR[cat.slug] || cat.name) : cat.name}</span>
+                <Link key={cat.id} href={`/${locale}/category/${cat.slug}`}
+                  style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden" }}
+                  className="flex flex-col hover:border-[var(--primary)] transition-colors text-center group">
+                  <div style={{ position: "relative", width: "100%", aspectRatio: "1", overflow: "hidden" }}>
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={CATEGORY_THUMBS[cat.slug] || CATEGORY_THUMBS["other"]} alt={cat.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} className="group-hover:scale-110 transition-transform duration-300" />
+                  </div>
+                  <span style={{ color: "var(--text)", padding: "0.375rem 0.25rem", fontSize: "0.7rem", fontWeight: 600, lineHeight: 1.2 }} className="group-hover:text-[var(--primary)] transition-colors">{locale === "ar" ? (CAT_AR[cat.slug] || cat.name) : cat.name}</span>
                 </Link>
               ))}
             </div>
@@ -100,8 +175,8 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         {featuredAds.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-4">
-              <h2 style={{ color: "var(--text)" }} className="text-xl font-bold">{`⭐ ${t("featuredAds")}`}</h2>
-              <Link href="/search?featured=true" style={{ color: "var(--primary)" }} className="text-sm font-medium hover:underline">{t("viewAll")}</Link>
+              <h2 style={{ color: "var(--text)" }} className="text-xl font-bold">{t("featuredAds")}</h2>
+              <Link href={`/${locale}/search?featured=true`} style={{ color: "var(--primary)" }} className="text-sm font-medium hover:underline">{t("viewAll")}</Link>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {featuredAds.map((ad) => <AdCard key={ad.id} ad={ad} {...{} as any} badge={t("featured")} badgeStyle={{ backgroundColor: "#FEF9C3", color: "#854D0E" }} locale={locale} />)}
@@ -113,8 +188,8 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         {activeOffers.length > 0 && (
           <section>
             <div className="flex items-center justify-between mb-4">
-              <h2 style={{ color: "var(--text)" }} className="text-xl font-bold">{`🔥 ${t("activeOffers")}`}</h2>
-              <Link href="/search?type=offer" style={{ color: "var(--primary)" }} className="text-sm font-medium hover:underline">{t("viewAll")}</Link>
+              <h2 style={{ color: "var(--text)" }} className="text-xl font-bold">{t("activeOffers")}</h2>
+              <Link href={`/${locale}/search?type=offer`} style={{ color: "var(--primary)" }} className="text-sm font-medium hover:underline">{t("viewAll")}</Link>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
               {activeOffers.map((ad) => <AdCard key={ad.id} ad={ad} badge={locale === "ar" ? "عرض" : "Offer"} badgeStyle={{ backgroundColor: "#FFEDD5", color: "#9A3412" }} showOfferExpiry locale={locale} />)}
@@ -126,12 +201,12 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         <section>
           <div className="flex items-center justify-between mb-4">
             <h2 style={{ color: "var(--text)" }} className="text-xl font-bold">{`🕐 ${t("latestAds")}`}</h2>
-            <Link href="/search" style={{ color: "var(--primary)" }} className="text-sm font-medium hover:underline">{t("viewAll")}</Link>
+            <Link href={`/${locale}/search`} style={{ color: "var(--primary)" }} className="text-sm font-medium hover:underline">{t("viewAll")}</Link>
           </div>
           {latestAds.length === 0 ? (
             <div style={{ backgroundColor: "var(--surface)", border: "1.5px dashed var(--border)", borderRadius: "var(--radius-lg)" }} className="text-center py-16">
               <p style={{ color: "var(--text-muted)" }} className="text-lg mb-4">{t("noAds")}</p>
-              <Link href="/new" className="btn-primary">Be the first to post!</Link>
+              <Link href={`/${locale}/new`} className="btn-primary">{locale === "ar" ? "كن أول من ينشر إعلاناً!" : "Be the first to post!"}</Link>
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
@@ -144,7 +219,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         <section style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)" }} className="p-8 text-center shadow-card">
           <h2 style={{ color: "var(--text)" }} className="text-2xl font-bold mb-2">{t("boostTitle")}</h2>
           <p style={{ color: "var(--text-muted)" }} className="mb-6">{t("boostSub")}</p>
-          <Link href="/pricing" className="btn-primary" style={{ height: 48, padding: "0 2rem", fontSize: "0.9375rem" }}>{t("viewPricing")}</Link>
+          <Link href={`/${locale}/pricing`} className="btn-primary" style={{ height: 48, padding: "0 2rem", fontSize: "0.9375rem" }}>{t("viewPricing")}</Link>
         </section>
       </main>
       <Footer />
@@ -174,20 +249,21 @@ function AdCard({
     : getCategoryImage(ad.category);
 
   return (
-    <Link href={`/ad/${ad.id}`}
+    <Link href={`/${locale}/ad/${ad.id}`}
       style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)" }}
       className="block overflow-hidden hover:border-[var(--primary)] hover:shadow-card transition-all group">
       {/* Image */}
       <div className="relative h-44 overflow-hidden" style={{ backgroundColor: "var(--surface-2)" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={imgSrc} alt={title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+        <img src={imgSrc} alt={title} loading="eager" style={image ? {} : { opacity: 0.5 }} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+        {!image && <span style={{ position: "absolute", bottom: "0.375rem", insetInlineEnd: "0.375rem", fontSize: "0.55rem", fontWeight: 600, padding: "0.125rem 0.375rem", borderRadius: 999, backgroundColor: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.75)" }}>{locale === "ar" ? "صورة توضيحية" : "Illustrative"}</span>}
         {/* Badges */}
-        <div className="absolute top-2 left-2 flex gap-1">
+        <div className="absolute top-2 flex gap-1" style={{ insetInlineStart: "0.5rem" }}>
           {badge && badgeStyle && (
             <span className="badge" style={badgeStyle}>{badge}</span>
           )}
           {ad.isFeatured && !badge && (
-            <span className="badge" style={{ backgroundColor: "#FEF9C3", color: "#854D0E" }}>{`⭐ ${t("featured")}`}</span>
+            <span className="badge" style={{ backgroundColor: "#FEF9C3", color: "#854D0E" }}>{t("featured")}</span>
           )}
         </div>
       </div>
@@ -200,7 +276,7 @@ function AdCard({
         <div className="flex items-center justify-between">
           <span style={{ color: "var(--text-muted)" }} className="text-xs capitalize">{locale === "ar" ? (CAT_AR[ad.category.toLowerCase().replace(/ /g,"-")] || ad.category) : ad.category}</span>
           {showOfferExpiry && ad.offerEndDate
-            ? <span style={{ color: "#EA580C" }} className="text-xs font-medium">Ends {new Date(ad.offerEndDate).toLocaleDateString("en-AE")}</span>
+            ? <span style={{ color: "#EA580C" }} className="text-xs font-medium">{locale === "ar" ? "ينتهي" : "Ends"} {new Date(ad.offerEndDate).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE")}</span>
             : ad.publishedAt
               ? <span style={{ color: "var(--text-muted)" }} className="text-xs">{new Date(ad.publishedAt).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE")}</span>
               : null}
