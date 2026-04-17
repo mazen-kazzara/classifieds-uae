@@ -21,9 +21,13 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
     ? `تصفح إعلانات ${name} المبوبة في الإمارات. اعثر على أفضل العروض — بيع، شراء وإعلان مجاني.`
     : `Browse ${cat.name} classified ads in UAE. Find the best deals on ${cat.name.toLowerCase()} — buy, sell & advertise for free.`;
   const url = `https://classifiedsuae.ae/${locale}/category/${slug}`;
+  const imageUrl = cat.imageUrl || "https://classifiedsuae.ae/og-image.jpg";
   return {
     title,
     description: desc,
+    keywords: isAr
+      ? [`${name} الإمارات`, `${name} دبي`, `بيع ${name}`, `شراء ${name}`, "إعلانات مبوبة"]
+      : [`${cat.name} UAE`, `${cat.name} Dubai`, `buy ${cat.name.toLowerCase()}`, `sell ${cat.name.toLowerCase()}`, "classified ads"],
     openGraph: {
       title: `${name} — CLASSIFIEDS UAE`,
       description: desc,
@@ -31,13 +35,22 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       siteName: "CLASSIFIEDS UAE",
       locale: isAr ? "ar_AE" : "en_AE",
       type: "website",
+      images: [{ url: imageUrl, width: 800, height: 600, alt: name }],
+      countryName: "United Arab Emirates",
+    },
+    twitter: {
+      card: "summary_large_image",
+      site: "@clasifiedsuae",
+      title: `${name} — CLASSIFIEDS UAE`,
+      description: desc,
+      images: [imageUrl],
     },
     alternates: {
       canonical: url,
       languages: {
         en: `https://classifiedsuae.ae/en/category/${slug}`,
         ar: `https://classifiedsuae.ae/ar/category/${slug}`,
-        "x-default": `https://classifiedsuae.ae/en/category/${slug}`,
+        "x-default": `https://classifiedsuae.ae/ar/category/${slug}`,
       },
     },
   };
@@ -73,8 +86,26 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   ]);
   const totalPages = Math.ceil(total / LIMIT);
 
+  const catName = locale === "ar" ? (category as any).nameAr || category.name : category.name;
+  const categoryJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "CollectionPage",
+    name: catName,
+    url: `https://classifiedsuae.ae/${locale}/category/${slug}`,
+    description: `${catName} classified ads in UAE`,
+    isPartOf: { "@type": "WebSite", name: "Classifieds UAE", url: "https://classifiedsuae.ae" },
+    breadcrumb: {
+      "@type": "BreadcrumbList",
+      itemListElement: [
+        { "@type": "ListItem", position: 1, name: locale === "ar" ? "الرئيسية" : "Home", item: `https://classifiedsuae.ae/${locale}` },
+        { "@type": "ListItem", position: 2, name: catName, item: `https://classifiedsuae.ae/${locale}/category/${slug}` },
+      ],
+    },
+  };
+
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }} dir={locale === "ar" ? "rtl" : "ltr"}>
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(categoryJsonLd) }} />
       <Header />
       <main className="max-w-6xl mx-auto px-4 py-8">
         <div className="flex flex-wrap items-center gap-3 mb-6">

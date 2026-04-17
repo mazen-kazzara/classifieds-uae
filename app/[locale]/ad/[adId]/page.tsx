@@ -164,7 +164,7 @@ export default async function AdPage({ params }: Props) {
                 return (
                   <a key={m.id} href={url} target="_blank" rel="noopener noreferrer">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={url} alt="Ad image" style={{ width: "100%", height: 260, objectFit: "cover", borderRadius: "var(--radius-md)", border: "1.5px solid var(--border)" }} />
+                    <img src={url} alt={`${ad.title || ad.description?.slice(0, 80) || "Classified ad"} - ${ad.category} in UAE`} style={{ width: "100%", height: 260, objectFit: "cover", borderRadius: "var(--radius-md)", border: "1.5px solid var(--border)" }} />
                   </a>
                 );
               }) : (

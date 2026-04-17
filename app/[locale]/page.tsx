@@ -16,17 +16,17 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
       ? "CLASSIFIEDS UAE — بيع، شراء وخدمات في الإمارات"
       : "CLASSIFIEDS UAE — Buy, Sell & Find Services in UAE",
     description: isAr
-      ? "انشر إعلانات مبوبة مجانية في الإمارات. سيارات، عقارات، إلكترونيات، وظائف، خدمات والمزيد. كل ما تحتاجه في مكان واحد."
-      : "Post free classified ads in UAE. Vehicles, real estate, electronics, jobs, services and more. Cars, property, phones, furniture — everything in one place.",
+      ? "انشر إعلانات مبوبة مجانية في الإمارات. سيارات، عقارات، موبايلات، إلكترونيات، وظائف، خدمات والمزيد. دبي، أبوظبي، الشارقة وجميع الإمارات."
+      : "Post free classified ads in UAE. Cars, real estate, mobiles, electronics, jobs, services and more across Dubai, Abu Dhabi, Sharjah and all Emirates.",
     keywords: isAr
-      ? ["إعلانات الإمارات", "بيع وشراء الإمارات", "إعلانات مبوبة دبي", "سوق الإمارات", "سيارات للبيع الإمارات", "عقارات الإمارات", "وظائف الإمارات"]
-      : ["classifieds UAE", "buy sell UAE", "classified ads Dubai", "UAE marketplace", "sell online UAE", "free ads UAE", "cars for sale UAE", "real estate UAE", "jobs UAE"],
+      ? ["إعلانات الإمارات", "بيع وشراء الإمارات", "إعلانات مبوبة دبي", "سوق الإمارات", "سيارات للبيع دبي", "عقارات الإمارات", "وظائف دبي", "إعلانات أبوظبي", "إعلانات الشارقة", "بيع وشراء دبي", "إعلانات مجانية الإمارات"]
+      : ["classifieds UAE", "buy sell UAE", "classified ads Dubai", "UAE marketplace", "sell online UAE", "free ads UAE", "cars for sale Dubai", "real estate UAE", "jobs Dubai", "Abu Dhabi classifieds", "Sharjah ads", "Dubai marketplace", "UAE free ads"],
     alternates: {
       canonical: `https://classifiedsuae.ae/${locale}`,
       languages: {
         "en": "https://classifiedsuae.ae/en",
         "ar": "https://classifiedsuae.ae/ar",
-        "x-default": "https://classifiedsuae.ae/en",
+        "x-default": "https://classifiedsuae.ae/ar",
       },
     },
   };
@@ -58,7 +58,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         "@type": "WebSite",
         name: "Classifieds UAE",
         url: "https://classifiedsuae.ae",
-        description: "UAE's fastest classified ads platform. Buy, sell & advertise.",
+        description: "UAE's fastest classified ads platform. Buy, sell & advertise across Dubai, Abu Dhabi, Sharjah and all Emirates.",
         inLanguage: ["en", "ar"],
         potentialAction: {
           "@type": "SearchAction",
@@ -76,8 +76,26 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
           "https://instagram.com/classifiedsuaeofficial",
           "https://www.threads.com/@classifiedsuaeofficial",
           "https://t.me/classifiedsuaeofficial",
+          "https://x.com/clasifiedsuae",
+          "https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34",
         ],
-        contactPoint: { "@type": "ContactPoint", contactType: "customer service", availableLanguage: ["English", "Arabic"] },
+        contactPoint: {
+          "@type": "ContactPoint",
+          contactType: "customer service",
+          availableLanguage: ["English", "Arabic"],
+          email: "info@classifiedsuae.ae",
+          areaServed: { "@type": "Country", name: "AE" },
+        },
+        areaServed: {
+          "@type": "Country",
+          name: "AE",
+        },
+        address: {
+          "@type": "PostalAddress",
+          addressCountry: "AE",
+          addressLocality: "Dubai",
+          addressRegion: "Dubai",
+        },
       },
       {
         "@type": "BreadcrumbList",
@@ -100,7 +118,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
           position: "relative",
         }} className="shadow-card">
           {bannerUrl && (
-            <Image src={bannerUrl} alt="" fill priority fetchPriority="high" sizes="100vw" style={{ objectFit: "cover" }} />
+            <Image src={bannerUrl} alt="Classifieds UAE — Buy, Sell & Advertise in the Emirates" fill priority fetchPriority="high" sizes="100vw" style={{ objectFit: "cover" }} />
           )}
           <div className="p-8 text-center" style={{ position: "relative", zIndex: 1, ...(bannerUrl ? { backgroundColor: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)" } : {}) }}>
             <h1 style={{ color: bannerUrl ? "#fff" : "var(--text)" }} className="text-3xl sm:text-4xl font-extrabold mb-3">

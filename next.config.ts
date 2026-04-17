@@ -4,6 +4,7 @@ const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
       { protocol: "https", hostname: "images.unsplash.com" },
+      { protocol: "https", hostname: "flagcdn.com" },
     ],
   },
   async headers() {
@@ -16,6 +17,21 @@ const nextConfig: NextConfig = {
           { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
           { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=()" },
           { key: "Strict-Transport-Security", value: "max-age=63072000; includeSubDomains; preload" },
+          { key: "Content-Language", value: "ar, en" },
+        ],
+      },
+      // Arabic pages
+      {
+        source: "/ar/:path*",
+        headers: [
+          { key: "Content-Language", value: "ar" },
+        ],
+      },
+      // English pages
+      {
+        source: "/en/:path*",
+        headers: [
+          { key: "Content-Language", value: "en" },
         ],
       },
       {

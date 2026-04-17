@@ -22,19 +22,22 @@ const cairo = Cairo({
 
 export const metadata: Metadata = {
   title: { default: "Classifieds UAE", template: "%s | Classifieds UAE" },
-  description: "UAE's fastest classified ads platform. Buy, sell & advertise — vehicles, real estate, electronics, jobs, services and more.",
+  description: "UAE's fastest classified ads platform. Buy, sell & advertise — cars, real estate, electronics, jobs, services and more across Dubai, Abu Dhabi, Sharjah and all Emirates.",
   metadataBase: new URL("https://classifiedsuae.ae"),
   openGraph: {
     title: "Classifieds UAE",
-    description: "UAE's fastest classified ads platform. Buy, sell & advertise — vehicles, real estate, electronics, jobs, services and more.",
+    description: "UAE's fastest classified ads platform. Buy, sell & advertise — cars, real estate, electronics, jobs, services and more across Dubai, Abu Dhabi, Sharjah and all Emirates.",
     url: "https://classifiedsuae.ae",
     siteName: "Classifieds UAE",
-    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Classifieds UAE" }],
+    images: [{ url: "/og-image.jpg", width: 1200, height: 630, alt: "Classifieds UAE — Buy, Sell & Advertise in the UAE" }],
     locale: "en_AE",
     type: "website",
+    countryName: "United Arab Emirates",
   },
   twitter: {
     card: "summary_large_image",
+    site: "@clasifiedsuae",
+    creator: "@clasifiedsuae",
     title: "Classifieds UAE",
     description: "UAE's fastest classified ads platform. Buy, sell & advertise.",
     images: ["/og-image.jpg"],
@@ -45,7 +48,22 @@ export const metadata: Metadata = {
   },
   alternates: {
     canonical: "https://classifiedsuae.ae",
-    languages: { "en": "https://classifiedsuae.ae/en", "ar": "https://classifiedsuae.ae/ar" },
+    languages: {
+      "en": "https://classifiedsuae.ae/en",
+      "ar": "https://classifiedsuae.ae/ar",
+      "x-default": "https://classifiedsuae.ae/ar",
+    },
+  },
+  other: {
+    "geo.region": "AE",
+    "geo.placename": "United Arab Emirates",
+    "geo.position": "25.2048;55.2708",
+    "ICBM": "25.2048, 55.2708",
+    "content-language": "ar, en",
+    "distribution": "UAE",
+    "target": "UAE",
+    "rating": "general",
+    "coverage": "United Arab Emirates",
   },
   verification: {
     google: process.env.GOOGLE_SITE_VERIFICATION || undefined,
