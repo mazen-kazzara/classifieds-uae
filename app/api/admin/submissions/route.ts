@@ -1,18 +1,30 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import type { NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { requireAdmin } from "@/lib/admin-auth";
 
 export async function GET(req: NextRequest) {
+  const auth = await requireAdmin(req, { minRole: "SUPERVISOR" });
+  if (auth.error) return auth.error;
   try {
-    const token = await getToken({ req, secret: process.env.NEXTAUTH_SECRET });
-    if (!token) return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
-    if (token.role !== "ADMIN" && token.role !== "SUPERVISOR") return NextResponse.json({ ok: false, error: "FORBIDDEN" }, { status: 403 });
     const sp = req.nextUrl.searchParams;
     const status = sp.get("status");
+    const search = sp.get("search")?.trim();
     const page = Math.max(parseInt(sp.get("page") || "1"), 1);
     const limit = 20;
-    const where = status ? { status: status as never } : {};
+    const where: any = {
+      ...(status ? { status } : {}),
+      ...(search ? {
+        OR: [
+          { phone: { contains: search } },
+          { text: { contains: search, mode: "insensitive" } },
+          { title: { contains: search, mode: "insensitive" } },
+          { id: { contains: search, mode: "insensitive" } },
+          { categoryName: { contains: search, mode: "insensitive" } },
+          { contactPhone: { contains: search } },
+        ],
+      } : {}),
+    };
     const [submissions, total] = await Promise.all([
       prisma.adSubmission.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page-1)*limit, take: limit, include: { payment: true, ad: { select: { id: true, status: true } } } }),
       prisma.adSubmission.count({ where }),

@@ -4,6 +4,9 @@ import GoogleProvider from "next-auth/providers/google";
 import FacebookProvider from "next-auth/providers/facebook";
 import { prisma } from "@/lib/prisma";
 import bcrypt from "bcryptjs";
+import { verifyTOTP } from "@/lib/totp";
+
+const ADMIN_ROLES = ["ADMIN", "CONTENT_ADMIN", "SUPERVISOR"] as const;
 
 export const authOptions: NextAuthOptions = {
   secret: process.env.NEXTAUTH_SECRET,
@@ -22,21 +25,31 @@ export const authOptions: NextAuthOptions = {
           clientSecret: process.env.FACEBOOK_CLIENT_SECRET,
         })]
       : []),
-    // ── Admin: email + password ──
+    // ── Admin: email + password (+ optional 2FA code) ──
     CredentialsProvider({
       id: "admin-credentials",
       name: "Admin",
       credentials: {
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" },
+        otp: { label: "2FA Code", type: "text" },
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null;
         const user = await prisma.user.findUnique({ where: { email: credentials.email } });
         if (!user || !user.password) return null;
+        if (!(ADMIN_ROLES as readonly string[]).includes(user.role)) return null;
         const valid = await bcrypt.compare(credentials.password, user.password);
         if (!valid) return null;
-        return { id: user.id, email: user.email, phone: user.phone, role: user.role ?? "ADMIN" };
+        // 2FA enforcement
+        if (user.twoFactorEnabled) {
+          const otp = credentials.otp?.trim();
+          if (!otp) throw new Error("2FA_REQUIRED");
+          if (!user.twoFactorSecret || !verifyTOTP(otp, user.twoFactorSecret)) throw new Error("INVALID_2FA");
+        }
+        // Start activity timer
+        await prisma.user.update({ where: { id: user.id }, data: { lastActivityAt: new Date() } }).catch(() => {});
+        return { id: user.id, email: user.email, phone: user.phone, role: user.role };
       },
     }),
     // ── User: phone + password ──
@@ -93,7 +106,11 @@ export const authOptions: NextAuthOptions = {
       },
     }),
   ],
-  session: { strategy: "jwt" },
+  session: {
+    strategy: "jwt",
+    maxAge: 24 * 60 * 60, // 24h hard max (idle timeout enforced separately by requireAdmin)
+    updateAge: 5 * 60,    // refresh token every 5 min of activity
+  },
   pages: { signIn: "/admin/login" },
   callbacks: {
     async signIn({ user, account }) {
@@ -122,6 +139,7 @@ export const authOptions: NextAuthOptions = {
     },
     async jwt({ token, user, account }) {
       if (user) {
+        token.id = (user as any).id;
         token.role = (user as any).role ?? "USER";
         token.phone = (user as any).phone ?? null;
       }
@@ -151,7 +169,7 @@ export const authOptions: NextAuthOptions = {
     },
     async session({ session, token }) {
       if (session.user) {
-        (session.user as any).id = token.sub;
+        (session.user as any).id = (token as any).id ?? token.sub;
         (session.user as any).role = token.role ?? "USER";
         (session.user as any).phone = token.phone ?? null;
         (session.user as any).phoneVerified = token.phoneVerified ?? false;

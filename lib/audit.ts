@@ -13,6 +13,7 @@ interface AuditParams {
   entityId?: string | null;
   oldValue?: unknown;
   newValue?: unknown;
+  payload?: Record<string, unknown>;
 }
 
 export async function logAudit(params: AuditParams): Promise<void> {
@@ -30,6 +31,7 @@ export async function logAudit(params: AuditParams): Promise<void> {
           actorId: params.actorId || null,
           oldValue: params.oldValue ?? null,
           newValue: params.newValue ?? null,
+          ...(params.payload || {}),
         },
       },
     });

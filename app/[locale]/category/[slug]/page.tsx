@@ -6,24 +6,7 @@ import Footer from "@/components/Footer";
 import { notFound } from "next/navigation";
 import { getTranslations } from "@/lib/getTranslations";
 import type { Metadata } from "next";
-
-const CATEGORY_IMAGES: Record<string, string> = {
-  vehicles: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=800&q=80",
-  "real-estate": "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&q=80",
-  electronics: "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=800&q=80",
-  jobs: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800&q=80",
-  services: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&q=80",
-  salons: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&q=80",
-  "salons--beauty": "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&q=80",
-  clinics: "https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=800&q=80",
-  furniture: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&q=80",
-  education: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&q=80",
-  other: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=800&q=80",
-};
-function getCategoryImage(category: string): string {
-  const s = category.toLowerCase().replace(/ /g, "-").replace(/&/g, "").replace(/--/g, "-");
-  return CATEGORY_IMAGES[s] || CATEGORY_IMAGES["other"];
-}
+import { getCategories, getCatArMap, getCategoryImageMap, getCategoryImage } from "@/lib/categories";
 
 interface Props { params: Promise<{ slug: string; locale: string }>; searchParams: Promise<{ page?: string; type?: string }> }
 
@@ -63,11 +46,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function CategoryPage({ params, searchParams }: Props) {
   const { slug, locale } = await params;
   const t = getTranslations(locale, "search");
-  const CAT_AR: Record<string, string> = {
-    vehicles: "مركبات", "real-estate": "عقارات", electronics: "إلكترونيات",
-    jobs: "وظائف", services: "خدمات", salons: "صالونات وتجميل", "salons-beauty": "صالونات وتجميل", "salons-&-beauty": "صالونات وتجميل", "salons & beauty": "صالونات وتجميل",
-    clinics: "عيادات", furniture: "أثاث", education: "تعليم", other: "أخرى",
-  };
+  const allCats = await getCategories();
+  const CAT_AR = getCatArMap(allCats);
+  const CATEGORY_IMAGES = getCategoryImageMap(allCats);
   const sp = await searchParams;
   const decodedSlug = decodeURIComponent(slug);
   const page = Math.max(parseInt(sp.page || "1"), 1);
@@ -80,6 +61,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
   const now = new Date();
   const where: any = {
     status: "PUBLISHED",
+    deletedAt: null,
     category: { equals: category.name, mode: "insensitive" },
     expiresAt: { gt: now },
     ...(contentType !== "all" ? { contentType } : {}),
@@ -122,7 +104,7 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                   <div style={{ position: "relative", height: 176, backgroundColor: "var(--surface-2)", overflow: "hidden" }}>
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
-                      src={image ? (image.url.startsWith("/") ? image.url : `/uploads/${image.url}`) : getCategoryImage(ad.category)}
+                      src={image ? (image.url.startsWith("/") ? image.url : `/uploads/${image.url}`) : getCategoryImage(ad.category, CATEGORY_IMAGES)}
                       alt={title}
                       loading="eager"
                       style={image ? {} : { opacity: 0.5 }}

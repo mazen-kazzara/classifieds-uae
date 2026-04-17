@@ -1,15 +1,9 @@
-
-const CAT_AR: Record<string, string> = {
-  vehicles: "مركبات", "real-estate": "عقارات", electronics: "إلكترونيات",
-  jobs: "وظائف", services: "خدمات", salons: "صالونات وتجميل", "salons-beauty": "صالونات وتجميل", "salons-&-beauty": "صالونات وتجميل", "salons & beauty": "صالونات وتجميل",
-  clinics: "عيادات", furniture: "أثاث",
-  education: "تعليم", other: "أخرى",
-};
-export const dynamic = "force-dynamic";
+export const revalidate = 60;
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import Image from "next/image";
 import Header from "@/components/Header";
+import { getCategories, getCatArMap, getCategoryImageMap, getCategoryImage } from "@/lib/categories";
 import Footer from "@/components/Footer";
 import { getTranslations } from "@/lib/getTranslations";
 import type { Metadata } from "next";
@@ -38,46 +32,21 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   };
 }
 
-const CATEGORY_IMAGES: Record<string, string> = {
-  vehicles: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=800&q=80",
-  "real-estate": "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&q=80",
-  electronics: "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=800&q=80",
-  jobs: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800&q=80",
-  services: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&q=80",
-  salons: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&q=80",
-  clinics: "https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=800&q=80",
-  furniture: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&q=80",
-  education: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&q=80",
-  other: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=800&q=80",
-};
-
-function getCategoryImage(category: string): string {
-  const slug = category.toLowerCase().replace(/ /g, "-").replace(/&/g, "").replace(/--/g, "-");
-  return CATEGORY_IMAGES[slug] || CATEGORY_IMAGES["other"];
-}
-
-const CATEGORY_THUMBS: Record<string, string> = {
-  vehicles: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=800&q=80",
-  "real-estate": "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=400&h=400&fit=crop&q=80",
-  electronics: "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=400&h=400&fit=crop&q=80",
-  jobs: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=400&h=400&fit=crop&q=80",
-  services: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=400&h=400&fit=crop&q=80",
-  salons: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=400&h=400&fit=crop&q=80",
-  clinics: "https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=400&h=400&fit=crop&q=80",
-  furniture: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=400&h=400&fit=crop&q=80",
-  education: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=400&h=400&fit=crop&q=80",
-  other: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=400&h=400&fit=crop&q=80",
-};
 
 export default async function Home({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const t = getTranslations(locale, "home");
-  const now = new Date();
+  // Round to nearest minute so ISR caching (revalidate=60) works effectively
+  const now = new Date(Math.floor(Date.now() / 60000) * 60000);
+  const allCats = await getCategories();
+  const CAT_AR = getCatArMap(allCats);
+  const CATEGORY_THUMBS = getCategoryImageMap(allCats, "thumb");
+  const CATEGORY_IMAGES = getCategoryImageMap(allCats, "card");
   const [categories, featuredAds, latestAds, activeOffers, bannerSetting] = await Promise.all([
     prisma.category.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } }),
-    prisma.ad.findMany({ where: { status: "PUBLISHED", isFeatured: true, expiresAt: { gt: now } }, orderBy: { publishedAt: "desc" }, take: 6, include: { media: { orderBy: { position: "asc" }, take: 1 } } }),
-    prisma.ad.findMany({ where: { status: "PUBLISHED", contentType: { in: ["ad","service"] }, expiresAt: { gt: now } }, orderBy: { publishedAt: "desc" }, take: 12, include: { media: { orderBy: { position: "asc" }, take: 1 } } }),
-    prisma.ad.findMany({ where: { status: "PUBLISHED", contentType: "offer", expiresAt: { gt: now }, offerEndDate: { gt: now } }, orderBy: { publishedAt: "desc" }, take: 6, include: { media: { orderBy: { position: "asc" }, take: 1 } } }),
+    prisma.ad.findMany({ where: { status: "PUBLISHED", deletedAt: null, isFeatured: true, expiresAt: { gt: now } }, orderBy: { publishedAt: "desc" }, take: 6, include: { media: { orderBy: { position: "asc" }, take: 1 } } }),
+    prisma.ad.findMany({ where: { status: "PUBLISHED", deletedAt: null, contentType: { in: ["ad","service"] }, expiresAt: { gt: now } }, orderBy: { publishedAt: "desc" }, take: 12, include: { media: { orderBy: { position: "asc" }, take: 1 } } }),
+    prisma.ad.findMany({ where: { status: "PUBLISHED", deletedAt: null, contentType: "offer", expiresAt: { gt: now }, offerEndDate: { gt: now } }, orderBy: { publishedAt: "desc" }, take: 6, include: { media: { orderBy: { position: "asc" }, take: 1 } } }),
     prisma.siteSetting.findUnique({ where: { key: "hero_banner" } }),
   ]);
   const bannerUrl = bannerSetting?.value || null;
@@ -128,9 +97,12 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         {/* Hero */}
         <section style={{
           backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden",
-          ...(bannerUrl ? { backgroundImage: `url(${bannerUrl})`, backgroundSize: "cover", backgroundPosition: "center", backgroundRepeat: "no-repeat" } : {}),
+          position: "relative",
         }} className="shadow-card">
-          <div className="p-8 text-center" style={bannerUrl ? { backgroundColor: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)" } : {}}>
+          {bannerUrl && (
+            <Image src={bannerUrl} alt="" fill priority fetchPriority="high" sizes="100vw" style={{ objectFit: "cover" }} />
+          )}
+          <div className="p-8 text-center" style={{ position: "relative", zIndex: 1, ...(bannerUrl ? { backgroundColor: "rgba(0,0,0,0.45)", backdropFilter: "blur(2px)" } : {}) }}>
             <h1 style={{ color: bannerUrl ? "#fff" : "var(--text)" }} className="text-3xl sm:text-4xl font-extrabold mb-3">
               {t("hero")}
             </h1>
@@ -155,14 +127,13 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
         {categories.length > 0 && (
           <section>
             <h2 style={{ color: "var(--text)" }} className="text-xl font-bold mb-4">{t("browseCategories")}</h2>
-            <div className="grid grid-cols-3 sm:grid-cols-5 lg:grid-cols-10 gap-3">
-              {categories.map((cat) => (
+            <div className="grid grid-cols-5 sm:grid-cols-5 lg:grid-cols-8 gap-2">
+              {categories.filter(c => !(c as any).parentId).map((cat) => (
                 <Link key={cat.id} href={`/${locale}/category/${cat.slug}`}
                   style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden" }}
                   className="flex flex-col hover:border-[var(--primary)] transition-colors text-center group">
                   <div style={{ position: "relative", width: "100%", aspectRatio: "1", overflow: "hidden" }}>
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={CATEGORY_THUMBS[cat.slug] || CATEGORY_THUMBS["other"]} alt={cat.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} className="group-hover:scale-110 transition-transform duration-300" />
+                    <Image src={CATEGORY_THUMBS[cat.slug] || CATEGORY_THUMBS["others"] || CATEGORY_THUMBS["other"]} alt={cat.name} width={200} height={200} sizes="(max-width: 640px) 33vw, (max-width: 1024px) 20vw, 20vw" style={{ width: "100%", height: "100%", objectFit: "cover" }} className="group-hover:scale-110 transition-transform duration-300" />
                   </div>
                   <span style={{ color: "var(--text)", padding: "0.375rem 0.25rem", fontSize: "0.7rem", fontWeight: 600, lineHeight: 1.2 }} className="group-hover:text-[var(--primary)] transition-colors">{locale === "ar" ? (CAT_AR[cat.slug] || cat.name) : cat.name}</span>
                 </Link>
@@ -179,7 +150,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
               <Link href={`/${locale}/search?featured=true`} style={{ color: "var(--primary)" }} className="text-sm font-medium hover:underline">{t("viewAll")}</Link>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {featuredAds.map((ad) => <AdCard key={ad.id} ad={ad} {...{} as any} badge={t("featured")} badgeStyle={{ backgroundColor: "#FEF9C3", color: "#854D0E" }} locale={locale} />)}
+              {featuredAds.map((ad) => <AdCard key={ad.id} ad={ad} {...{} as any} badge={t("featured")} badgeStyle={{ backgroundColor: "#FEF9C3", color: "#854D0E" }} locale={locale} categoryImages={CATEGORY_IMAGES} catAr={CAT_AR} />)}
             </div>
           </section>
         )}
@@ -192,7 +163,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
               <Link href={`/${locale}/search?type=offer`} style={{ color: "var(--primary)" }} className="text-sm font-medium hover:underline">{t("viewAll")}</Link>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {activeOffers.map((ad) => <AdCard key={ad.id} ad={ad} badge={locale === "ar" ? "عرض" : "Offer"} badgeStyle={{ backgroundColor: "#FFEDD5", color: "#9A3412" }} showOfferExpiry locale={locale} />)}
+              {activeOffers.map((ad) => <AdCard key={ad.id} ad={ad} badge={locale === "ar" ? "عرض" : "Offer"} badgeStyle={{ backgroundColor: "#FFEDD5", color: "#9A3412" }} showOfferExpiry locale={locale} categoryImages={CATEGORY_IMAGES} catAr={CAT_AR} />)}
             </div>
           </section>
         )}
@@ -210,7 +181,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
             </div>
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-              {latestAds.map((ad) => <AdCard key={ad.id} ad={ad} locale={locale} />)}
+              {latestAds.map((ad) => <AdCard key={ad.id} ad={ad} locale={locale} categoryImages={CATEGORY_IMAGES} catAr={CAT_AR} />)}
             </div>
           )}
         </section>
@@ -228,7 +199,7 @@ export default async function Home({ params }: { params: Promise<{ locale: strin
 }
 
 function AdCard({
-  ad, badge, badgeStyle, showOfferExpiry = false, locale = "en",
+  ad, badge, badgeStyle, showOfferExpiry = false, locale = "en", categoryImages = {}, catAr = {},
 }: {
   ad: {
     id: string; title?: string | null; description: string; category: string;
@@ -240,13 +211,15 @@ function AdCard({
   badgeStyle?: React.CSSProperties;
   showOfferExpiry?: boolean;
   locale?: string;
+  categoryImages?: Record<string, string>;
+  catAr?: Record<string, string>;
 }) {
   const t = getTranslations(locale, "home");
   const image = ad.media[0];
   const title = ad.title || ad.description.slice(0, 60);
   const imgSrc = image
     ? (image.url.startsWith("/") ? image.url : `/uploads/${image.url}`)
-    : getCategoryImage(ad.category);
+    : getCategoryImage(ad.category, categoryImages);
 
   return (
     <Link href={`/${locale}/ad/${ad.id}`}
@@ -255,7 +228,7 @@ function AdCard({
       {/* Image */}
       <div className="relative h-44 overflow-hidden" style={{ backgroundColor: "var(--surface-2)" }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={imgSrc} alt={title} loading="eager" style={image ? {} : { opacity: 0.5 }} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+        <Image src={imgSrc} alt={title} width={400} height={250} sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 33vw" style={{ ...(image ? {} : { opacity: 0.5 }), objectFit: "cover" }} className="w-full h-full group-hover:scale-105 transition-transform duration-300" />
         {!image && <span style={{ position: "absolute", bottom: "0.375rem", insetInlineEnd: "0.375rem", fontSize: "0.55rem", fontWeight: 600, padding: "0.125rem 0.375rem", borderRadius: 999, backgroundColor: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.75)" }}>{locale === "ar" ? "صورة توضيحية" : "Illustrative"}</span>}
         {/* Badges */}
         <div className="absolute top-2 flex gap-1" style={{ insetInlineStart: "0.5rem" }}>
@@ -274,7 +247,7 @@ function AdCard({
         <p style={{ color: "var(--text-muted)" }} className="text-xs line-clamp-2 mb-2">{ad.description.slice(0, 100)}</p>
 
         <div className="flex items-center justify-between">
-          <span style={{ color: "var(--text-muted)" }} className="text-xs capitalize">{locale === "ar" ? (CAT_AR[ad.category.toLowerCase().replace(/ /g,"-")] || ad.category) : ad.category}</span>
+          <span style={{ color: "var(--text-muted)" }} className="text-xs capitalize">{locale === "ar" ? (catAr[ad.category.toLowerCase().replace(/ /g,"-")] || ad.category) : ad.category}</span>
           {showOfferExpiry && ad.offerEndDate
             ? <span style={{ color: "#EA580C" }} className="text-xs font-medium">{locale === "ar" ? "ينتهي" : "Ends"} {new Date(ad.offerEndDate).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE")}</span>
             : ad.publishedAt

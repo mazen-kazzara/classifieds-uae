@@ -30,21 +30,35 @@ export async function POST(req: NextRequest) {
     if (!phone) return NextResponse.json({ ok: false, error: "PHONE_REQUIRED" }, { status: 400 });
     if (!/^9715\d{8}$/.test(phone)) return NextResponse.json({ ok: false, error: "INVALID_PHONE_FORMAT" }, { status: 400 });
     const sessionUserId = (session.user as any).id ?? null;
+    const sessionRole = (session.user as any).role ?? "USER";
+    const isAdmin = sessionRole === "ADMIN" || sessionRole === "CONTENT_ADMIN";
 
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const count24h = await prisma.adSubmission.count({ where: { phone, createdAt: { gte: since } } });
-    if (count24h >= 5) return NextResponse.json({ ok: false, error: "DAILY_LIMIT_REACHED" }, { status: 429 });
+    // Admins have no daily limit
+    if (!isAdmin) {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const count24h = await prisma.adSubmission.count({ where: { phone, createdAt: { gte: since } } });
+      if (count24h >= 5) return NextResponse.json({ ok: false, error: "DAILY_LIMIT_REACHED" }, { status: 429 });
+    }
 
     const existing = await prisma.adSubmission.findFirst({ where: { phone, status: "DRAFT" }, orderBy: { createdAt: "desc" } });
     if (existing) {
       if (sessionUserId && !existing.userId) await prisma.adSubmission.update({ where: { id: existing.id }, data: { userId: sessionUserId } });
+      // Auto-assign admin package if admin
+      if (isAdmin && !existing.packageId) {
+        await prisma.adSubmission.update({ where: { id: existing.id }, data: { packageId: "admin-unlimited" } });
+      }
       await logAudit({ actorType: "USER", actorId: phone, ipAddress: ip, userAgent, action: "REUSE_DRAFT", entity: "AdSubmission", entityId: existing.id });
-      return NextResponse.json({ ok: true, reused: true, submissionId: existing.id, status: existing.status });
+      return NextResponse.json({ ok: true, reused: true, submissionId: existing.id, status: existing.status, isAdmin });
     }
 
-    const submission = await prisma.adSubmission.create({ data: { phone, status: "DRAFT", userId: sessionUserId } });
+    const submission = await prisma.adSubmission.create({
+      data: {
+        phone, status: "DRAFT", userId: sessionUserId,
+        ...(isAdmin ? { packageId: "admin-unlimited" } : {}),
+      },
+    });
     await logAudit({ actorType: "USER", actorId: phone, ipAddress: ip, userAgent, action: "CREATE_SUBMISSION", entity: "AdSubmission", entityId: submission.id });
-    return NextResponse.json({ ok: true, reused: false, submissionId: submission.id, status: submission.status });
+    return NextResponse.json({ ok: true, reused: false, submissionId: submission.id, status: submission.status, isAdmin });
   } catch (err: unknown) {
     return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: err instanceof Error ? err.message : "" }, { status: 500 });
   }

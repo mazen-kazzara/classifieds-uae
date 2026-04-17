@@ -46,7 +46,7 @@ export default function Header() {
           {/* Logo */}
           <Link href={`/${locale}`} className="flex-shrink-0 flex items-center gap-2">
             <img src="/Classifieds_uae_jpg.jpeg" alt="Classifieds UAE" style={{width: "36px", height: "36px"}} className="rounded-lg object-contain" />
-            <span style={{ color: "var(--text)", fontFamily: "'Inter', sans-serif" }} className="text-lg font-bold hidden sm:block">
+            <span style={{ color: "var(--text)", fontFamily: "var(--font-inter), sans-serif" }} className="text-lg font-bold hidden sm:block">
               Classifieds <span style={{ color: "#EF3B24" }}>U</span><span style={{ color: "#00B857" }}>A</span><span style={{ color: "var(--text)" }}>E</span>
             </span>
           </Link>

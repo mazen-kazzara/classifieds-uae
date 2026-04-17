@@ -11,25 +11,20 @@ export async function GET() {
   const sessionPhone = (session.user as any).phone;
   const sessionEmail = session.user?.email;
 
-  // Find the user in DB by ID, phone, or email
   let userId: string | null = null;
-
   if (sessionUserId) {
     const u = await prisma.user.findUnique({ where: { id: sessionUserId }, select: { id: true } });
     if (u) userId = u.id;
   }
-
   if (!userId && sessionPhone) {
     const u = await prisma.user.findUnique({ where: { phone: sessionPhone }, select: { id: true } });
     if (u) userId = u.id;
   }
-
   if (!userId && sessionEmail) {
     const u = await prisma.user.findUnique({ where: { email: sessionEmail.toLowerCase() }, select: { id: true } });
     if (u) userId = u.id;
   }
 
-  // Build query: match by userId OR by phone
   const conditions: any[] = [];
   if (userId) conditions.push({ userId });
   if (sessionPhone) conditions.push({ phone: sessionPhone });
@@ -38,12 +33,16 @@ export async function GET() {
     return NextResponse.json({ ok: true, ads: [] });
   }
 
+  // Include both PUBLISHED and EXPIRED ads (owner can see expired)
   const submissions = await prisma.adSubmission.findMany({
     where: {
       OR: conditions,
-      status: "PUBLISHED",
+      status: { in: ["PUBLISHED", "EXPIRED"] },
     },
-    include: { ad: { select: { id: true, title: true, category: true, status: true, publishedAt: true, expiresAt: true, isFeatured: true } } },
+    include: {
+      ad: { select: { id: true, title: true, category: true, status: true, publishedAt: true, expiresAt: true, isFeatured: true } },
+      package: { select: { name: true, nameAr: true, price: true } },
+    },
     orderBy: { createdAt: "desc" },
   });
 
@@ -51,6 +50,8 @@ export async function GET() {
     id: s.ad.id, title: s.ad.title, category: s.ad.category,
     status: s.ad.status, publishedAt: s.ad.publishedAt, expiresAt: s.ad.expiresAt,
     isFeatured: s.ad.isFeatured,
+    packageName: s.package?.name ?? "Free",
+    packagePrice: s.package?.price ?? 0,
   }] : []);
 
   return NextResponse.json({ ok: true, ads });

@@ -10,7 +10,7 @@ export async function GET(req: NextRequest) {
   const q = searchParams.get("q");
   const type = searchParams.get("type");
 
-  const where: any = { status: "PUBLISHED" };
+  const where: any = { status: "PUBLISHED", deletedAt: null };
   if (category) where.categorySlug = category;
   if (emirate) where.emirate = emirate;
   if (type) where.type = type;

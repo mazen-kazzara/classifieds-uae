@@ -7,7 +7,7 @@ const BASE = "https://classifiedsuae.ae";
 
 export async function GET() {
   const ads = await prisma.ad.findMany({
-    where: { status: "PUBLISHED" },
+    where: { status: "PUBLISHED", deletedAt: null },
     select: { id: true, updatedAt: true },
     orderBy: { publishedAt: "desc" },
     take: 10000,

@@ -19,12 +19,16 @@ const BACKEND_BASE_URL = (process.env.BACKEND_API || "http://localhost:3000").re
 const PUBLIC_URL = process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "https://classifiedsuae.com";
 const TELEGRAM_CHANNEL_ID = process.env.TELEGRAM_CHANNEL_ID || "";
 
-const IMG_PRICE    = 2.5;
-const NORMAL_BASE  = 10;
-const FEATURED_ADD = 25;
-const MAX_TITLE_CHARS = 50;
-const MAX_DESC_CHARS  = 300;
-const MAX_IMAGES      = 2;
+// Plan limits are now driven by the backend Package model.
+// These are fallback defaults only.
+const PLAN_LIMITS = {
+  free:     { price: 0,  maxChars: 150,  maxImages: 1, displayDays: 3 },
+  basic:    { price: 5,  maxChars: 400,  maxImages: 2, displayDays: 7 },
+  uaeflag:  { price: 0,  maxChars: 800,  maxImages: 4, displayDays: 14 },
+  standard: { price: 9,  maxChars: 800,  maxImages: 4, displayDays: 14 },
+  premium:  { price: 15, maxChars: 1200, maxImages: 6, displayDays: 30 },
+};
+const MAX_TITLE_CHARS = 100;
 const MAX_ADS_PER_DAY = 5;
 const MAX_IMAGE_BYTES = parseInt(process.env.TELEGRAM_MAX_IMAGE_BYTES || "", 10) || 5 * 1024 * 1024;
 const ENABLE_CLAMAV   = (process.env.ENABLE_CLAMAV || "false").toLowerCase() === "true";
@@ -34,18 +38,37 @@ const BANNED_WORDS = [
   "قمار","جنس","مخدرات","سلاح","إباحي","كوكايين","دعارة","بغاء","خمر","حشيش",
 ];
 
-const CATEGORIES = [
-  { id: "vehicles",    ar: "سيارات",          en: "Vehicles" },
-  { id: "real-estate", ar: "عقارات",           en: "Real Estate" },
-  { id: "electronics", ar: "إلكترونيات",       en: "Electronics" },
-  { id: "jobs",        ar: "وظائف",            en: "Jobs" },
-  { id: "services",    ar: "خدمات",            en: "Services" },
-  { id: "salons",      ar: "صالونات وتجميل",   en: "Salons & Beauty" },
-  { id: "clinics",     ar: "عيادات",           en: "Clinics" },
-  { id: "furniture",   ar: "أثاث",             en: "Furniture" },
-  { id: "education",   ar: "تعليم وتدريب",     en: "Education & Training" },
-  { id: "other",       ar: "أخرى",             en: "Other" },
+// Default fallback categories — overridden by API fetch on startup
+let CATEGORIES = [
+  { id: "cars",              ar: "سيارات",          en: "Cars" },
+  { id: "real-estate",       ar: "عقارات",           en: "Real Estate" },
+  { id: "jobs",              ar: "وظائف",            en: "Jobs" },
+  { id: "services",          ar: "خدمات",            en: "Services" },
+  { id: "mobiles",           ar: "موبايلات",         en: "Mobiles" },
+  { id: "electronics",       ar: "إلكترونيات",       en: "Electronics" },
+  { id: "computers-games",   ar: "كمبيوتر وألعاب",   en: "Computers & Games" },
+  { id: "furniture",         ar: "أثاث",             en: "Furniture" },
+  { id: "fashion-clothing",  ar: "ملابس وأزياء",     en: "Fashion & Clothing" },
+  { id: "education-training",ar: "تعليم وتدريب",     en: "Education & Training" },
+  { id: "salons-beauty",     ar: "صالونات وتجميل",   en: "Salons & Beauty" },
+  { id: "clinics",           ar: "عيادات",           en: "Clinics" },
+  { id: "pets",              ar: "حيوانات أليفة",    en: "Pets" },
+  { id: "equipment-tools",   ar: "معدات وأدوات",     en: "Equipment & Tools" },
+  { id: "others",            ar: "أخرى",             en: "Others" },
 ];
+
+// Fetch categories from API on startup and refresh every 5 minutes
+async function refreshCategories() {
+  try {
+    const res = await axios.get(`${PUBLIC_URL}/api/public/categories`);
+    if (res.data?.ok && res.data.categories?.length > 0) {
+      CATEGORIES = res.data.categories.map(c => ({ id: c.slug, ar: c.nameAr, en: c.name }));
+      console.log("Categories refreshed from API:", CATEGORIES.length);
+    }
+  } catch (e) { console.error("Failed to refresh categories:", e.message); }
+}
+refreshCategories();
+setInterval(refreshCategories, 5 * 60 * 1000);
 
 function initState() {
   return {
@@ -111,15 +134,20 @@ function hasEmoji(t) { return /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u.test(t);
 function hasBanned(t) { const l = t.toLowerCase(); return BANNED_WORDS.some(w => l.includes(w)); }
 
 function planTotal(state) {
-  const imgs = state.images.length * IMG_PRICE;
-  if (state.selectedPlan === "free")     return 0;
-  if (state.selectedPlan === "normal")   return NORMAL_BASE + imgs;
-  if (state.selectedPlan === "featured") return FEATURED_ADD + imgs;
-  return 0;
+  const limits = PLAN_LIMITS[state.selectedPlan] || PLAN_LIMITS.free;
+  return limits.price;
+}
+
+function planMaxChars(plan) {
+  return (PLAN_LIMITS[plan] || PLAN_LIMITS.free).maxChars;
+}
+
+function planMaxImages(plan) {
+  return (PLAN_LIMITS[plan] || PLAN_LIMITS.free).maxImages;
 }
 
 function planSupportsImages(plan) {
-  return plan === "normal" || plan === "featured";
+  return planMaxImages(plan) > 0;
 }
 
 function cleanupImages(images) {
@@ -188,9 +216,11 @@ bot.command("help", async ctx => {
     "🔟 Add images (if plan supports)\n" +
     "1️⃣1️⃣ Review summary and publish\n\n" +
     "📦 Plans:\n" +
-    "🆓 Free     — 0 AED    | 3 days  | No images\n" +
-    "📦 Normal   — 10 AED   | 30 days | Up to 2 images (2.5 AED each)\n" +
-    "⭐ Featured — 35 AED   | 30 days | Up to 2 images (2.5 AED each) | Pinned at top\n\n" +
+    "🆓 Free     — 0 AED  | 3 days  | 150 chars | 1 image\n" +
+    "📦 Basic    — 5 AED  | 7 days  | 400 chars | 2 images\n" +
+    "🇦🇪 UAE Flag — Free   | 14 days | 800 chars | 4 images (Launch Offer!)\n" +
+    "⭐ Standard — 9 AED  | 14 days | 800 chars | 4 images (Best Value)\n" +
+    "💎 Premium  — 15 AED | 30 days | 1200 chars | 6 images\n\n" +
     "━━━━━━ العربية ━━━━━━\n" +
     "1️⃣ /start ← الموافقة على الشروط والأحكام\n" +
     "2️⃣ اختر اللغة\n" +
@@ -199,14 +229,16 @@ bot.command("help", async ctx => {
     "5️⃣ اختر منصة النشر\n" +
     "6️⃣ اختر فئة الإعلان\n" +
     "7️⃣ أدخل عنوان الإعلان (50 حرفاً كحد أقصى)\n" +
-    "8️⃣ اكتب وصف الإعلان (300 حرف كحد أقصى)\n" +
+    "8️⃣ اكتب وصف الإعلان\n" +
     "9️⃣ أدخل سعر المنتج\n" +
-    "🔟 أضف صوراً إن كانت باقتك تدعمها\n" +
+    "🔟 أضف صوراً\n" +
     "1️⃣1️⃣ راجع الملخص وانشر\n\n" +
     "📦 الباقات:\n" +
-    "🆓 مجاني  — 0 درهم  | 3 أيام  | بدون صور\n" +
-    "📦 عادي   — 10 درهم | 30 يوماً | صورتان (2.5 درهم للصورة)\n" +
-    "⭐ مميز   — 35 درهم | 30 يوماً | صورتان (2.5 درهم للصورة) | مثبّت في الأعلى"
+    "🆓 مجاني   — 0 درهم  | 3 أيام  | 150 حرف | صورة واحدة\n" +
+    "📦 أساسي   — 5 درهم  | 7 أيام  | 400 حرف | صورتين\n" +
+    "🇦🇪 علم الإمارات — مجاني | 14 يوماً | 800 حرف | 4 صور (عرض الإطلاق!)\n" +
+    "⭐ قياسي   — 9 درهم  | 14 يوماً | 800 حرف | 4 صور (الأفضل قيمة)\n" +
+    "💎 بريميوم — 15 درهم | 30 يوماً | 1200 حرف | 6 صور"
   );
 });
 
@@ -308,52 +340,40 @@ async function askPlan(ctx) {
   if (state.lang === "ar") {
     await ctx.reply(
       "📦 اختر الباقة المناسبة لإعلانك:\n\n" +
-      "━━━━━━━━━━━━━━━━━━━━\n" +
       "🆓 مجاني — 0 درهم\n" +
-      "• مدة الظهور: 3 أيام فقط\n" +
-      "• لا تدعم إضافة صور\n" +
-      "• ترتيب عادي في نتائج البحث\n\n" +
-      "━━━━━━━━━━━━━━━━━━━━\n" +
-      "📦 عادي — 10 درهم\n" +
-      "• مدة الظهور: 7 أيام\n" +
-      "• تدعم إضافة صورتين (2.5 درهم للصورة)\n" +
-      "• ترتيب عادي في نتائج البحث\n\n" +
-      "━━━━━━━━━━━━━━━━━━━━\n" +
-      "⭐ مميز — 25 درهم\n" +
-      "• مدة الظهور: 14 يوماً\n" +
-      "• تدعم إضافة صورتين (2.5 درهم للصورة)\n" +
-      "• 📌 مثبّت في أعلى نتائج البحث\n" +
-      "• شارة «مميز» على إعلانك",
-      Markup.inlineKeyboard([[
-        Markup.button.callback("🆓 مجاني", "plan_free"),
-        Markup.button.callback("📦 عادي", "plan_normal"),
-        Markup.button.callback("⭐ مميز", "plan_featured"),
-      ]])
+      "• 150 حرف · صورة واحدة · 3 أيام\n\n" +
+      "📦 أساسي — 5 درهم\n" +
+      "• 400 حرف · صورتين · 7 أيام\n\n" +
+      "🇦🇪 علم الإمارات — مجاني (عرض الإطلاق)\n" +
+      "• 800 حرف · 4 صور · 14 يوماً\n\n" +
+      "⭐ قياسي — 9 درهم (الأفضل قيمة)\n" +
+      "• 800 حرف · 4 صور · 14 يوماً\n\n" +
+      "💎 بريميوم — 15 درهم\n" +
+      "• 1200 حرف · 6 صور · 30 يوماً",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🆓 مجاني", "plan_free"), Markup.button.callback("📦 أساسي", "plan_basic")],
+        [Markup.button.callback("🇦🇪 علم الإمارات", "plan_uaeflag"), Markup.button.callback("⭐ قياسي", "plan_standard")],
+        [Markup.button.callback("💎 بريميوم", "plan_premium")],
+      ])
     );
   } else {
     await ctx.reply(
       "📦 Choose the right plan for your ad:\n\n" +
-      "━━━━━━━━━━━━━━━━━━━━\n" +
       "🆓 Free — 0 AED\n" +
-      "• Visibility: 3 days only\n" +
-      "• No images allowed\n" +
-      "• Standard listing placement\n\n" +
-      "━━━━━━━━━━━━━━━━━━━━\n" +
-      "📦 Normal — 10 AED\n" +
-      "• Visibility: 7 days\n" +
-      "• Supports up to 2 images (2.5 AED each)\n" +
-      "• Standard listing placement\n\n" +
-      "━━━━━━━━━━━━━━━━━━━━\n" +
-      "⭐ Featured — 25 AED\n" +
-      "• Visibility: 14 days\n" +
-      "• Supports up to 2 images (2.5 AED each)\n" +
-      "• 📌 Pinned at the top of search results\n" +
-      "• \"Featured\" badge on your ad",
-      Markup.inlineKeyboard([[
-        Markup.button.callback("🆓 Free", "plan_free"),
-        Markup.button.callback("📦 Normal", "plan_normal"),
-        Markup.button.callback("⭐ Featured", "plan_featured"),
-      ]])
+      "• 150 chars · 1 image · 3 days\n\n" +
+      "📦 Basic — 5 AED\n" +
+      "• 400 chars · 2 images · 7 days\n\n" +
+      "🇦🇪 UAE Flag — Free (Launch Offer)\n" +
+      "• 800 chars · 4 images · 14 days\n\n" +
+      "⭐ Standard — 9 AED (Best Value)\n" +
+      "• 800 chars · 4 images · 14 days\n\n" +
+      "💎 Premium — 15 AED\n" +
+      "• 1200 chars · 6 images · 30 days",
+      Markup.inlineKeyboard([
+        [Markup.button.callback("🆓 Free", "plan_free"), Markup.button.callback("📦 Basic", "plan_basic")],
+        [Markup.button.callback("🇦🇪 UAE Flag", "plan_uaeflag"), Markup.button.callback("⭐ Standard", "plan_standard")],
+        [Markup.button.callback("💎 Premium", "plan_premium")],
+      ])
     );
   }
 }
@@ -366,9 +386,11 @@ async function handlePlanSelected(ctx, plan) {
   state.publishPlatform = [];
   await ctx.editMessageReplyMarkup().catch(() => {});
   const labels = {
-    free:     { ar: "🆓 مجاني (0 درهم)",   en: "🆓 Free (0 AED)" },
-    normal:   { ar: "📦 عادي (10 درهم)",    en: "📦 Normal (10 AED)" },
-    featured: { ar: "⭐ مميز (25 درهم)",    en: "⭐ Featured (35 AED)" },
+    free:     { ar: "🆓 مجاني (0 درهم)",            en: "🆓 Free (0 AED)" },
+    basic:    { ar: "📦 أساسي (5 درهم)",            en: "📦 Basic (5 AED)" },
+    uaeflag:  { ar: "🇦🇪 علم الإمارات (مجاني)",       en: "🇦🇪 UAE Flag (Free)" },
+    standard: { ar: "⭐ قياسي (9 درهم)",            en: "⭐ Standard (9 AED)" },
+    premium:  { ar: "💎 بريميوم (15 درهم)",          en: "💎 Premium (15 AED)" },
   };
   await ctx.reply(
     state.lang === "ar"
@@ -379,8 +401,13 @@ async function handlePlanSelected(ctx, plan) {
 }
 
 bot.action("plan_free",     ctx => handlePlanSelected(ctx, "free"));
-bot.action("plan_normal",   ctx => handlePlanSelected(ctx, "normal"));
-bot.action("plan_featured", ctx => handlePlanSelected(ctx, "featured"));
+bot.action("plan_basic",    ctx => handlePlanSelected(ctx, "basic"));
+bot.action("plan_uaeflag",  ctx => handlePlanSelected(ctx, "uaeflag"));
+bot.action("plan_standard", ctx => handlePlanSelected(ctx, "standard"));
+bot.action("plan_premium",  ctx => handlePlanSelected(ctx, "premium"));
+// Legacy callbacks (backwards compat)
+bot.action("plan_normal",   ctx => handlePlanSelected(ctx, "basic"));
+bot.action("plan_featured", ctx => handlePlanSelected(ctx, "standard"));
 
 function buildPlatformKeyboard(lang, selected) {
   const opts = [
@@ -388,22 +415,28 @@ function buildPlatformKeyboard(lang, selected) {
     { key: "website",   ar: "الموقع",       en: "Website",    icon: "🌍" },
     { key: "facebook",  ar: "فيسبوك",      en: "Facebook",   icon: "📘" },
     { key: "instagram", ar: "انستقرام",     en: "Instagram",  icon: "📷" },
+    { key: "x",         ar: "X",            en: "X",          icon: "✖️" },
   ];
   const row1 = opts.slice(0, 2).map(o => {
     const on = selected.includes(o.key);
     const label = (on ? "✅ " : "") + o.icon + " " + (lang === "ar" ? o.ar : o.en);
     return Markup.button.callback(label, "plat_toggle_" + o.key);
   });
-  const row2 = opts.slice(2).map(o => {
+  const row2 = opts.slice(2, 4).map(o => {
     const on = selected.includes(o.key);
     const label = (on ? "✅ " : "") + o.icon + " " + (lang === "ar" ? o.ar : o.en);
     return Markup.button.callback(label, "plat_toggle_" + o.key);
   });
-  const row3 = [
+  const row3 = opts.slice(4).map(o => {
+    const on = selected.includes(o.key);
+    const label = (on ? "✅ " : "") + o.icon + " " + (lang === "ar" ? o.ar : o.en);
+    return Markup.button.callback(label, "plat_toggle_" + o.key);
+  });
+  const row4 = [
     Markup.button.callback(lang === "ar" ? "🔘 تحديد الكل" : "🔘 Select All", "plat_all"),
     Markup.button.callback(lang === "ar" ? "✔️ تأكيد" : "✔️ Confirm", "plat_done"),
   ];
-  return Markup.inlineKeyboard([row1, row2, row3]);
+  return Markup.inlineKeyboard([row1, row2, row3, row4]);
 }
 
 bot.action(/^plat_toggle_(.+)$/, async ctx => {
@@ -426,7 +459,7 @@ bot.action("plat_all", async ctx => {
   const state = getState(ctx);
   if (state.step !== "platformSelect") return;
   if (!Array.isArray(state.publishPlatform)) state.publishPlatform = [];
-  const allPlats = ["telegram", "website", "facebook", "instagram"];
+  const allPlats = ["telegram", "website", "facebook", "instagram", "x"];
   if (state.publishPlatform.length === allPlats.length) {
     state.publishPlatform = [];
   } else {
@@ -452,9 +485,10 @@ bot.action("plat_done", async ctx => {
     website:   { ar: "الموقع 🌍",    en: "Website 🌍" },
     facebook:  { ar: "فيسبوك 📘",   en: "Facebook 📘" },
     instagram: { ar: "انستقرام 📷",  en: "Instagram 📷" },
+    x:         { ar: "X ✖️",         en: "X ✖️" },
   };
-  const chosenAr = state.publishPlatform.map(p => platLabels[p].ar).join(" + ");
-  const chosenEn = state.publishPlatform.map(p => platLabels[p].en).join(" + ");
+  const chosenAr = state.publishPlatform.map(p => (platLabels[p] || { ar: p }).ar).join(" + ");
+  const chosenEn = state.publishPlatform.map(p => (platLabels[p] || { en: p }).en).join(" + ");
   await ctx.reply(
     state.lang === "ar"
       ? "✅ منصات النشر: " + chosenAr + "\n\n📞 كيف تفضل أن يتواصل معك المشترون؟"
@@ -522,21 +556,23 @@ bot.action("img_no", async ctx => {
 
 bot.action("img2_yes", async ctx => {
   const state = getState(ctx);
-  if (state.step !== "imageUpload" || state.images.length !== 1) {
+  const maxImgs = planMaxImages(state.selectedPlan);
+  if (state.step !== "imageUpload" || state.images.length >= maxImgs) {
     await ctx.reply(state.lang === "ar" ? "⚠️ غير متاح الآن." : "⚠️ Not available now.").catch(() => {});
     return;
   }
   state.expectingImage = true;
   await ctx.editMessageReplyMarkup().catch(() => {});
+  const nextNum = state.images.length + 1;
   await ctx.reply(state.lang === "ar"
-    ? "📸 أرسل الصورة الثانية الآن.\n⚠️ الحد الأقصى لحجم الصورة: 5 ميغابايت"
-    : "📸 Send your second image now.\n⚠️ Maximum image size: 5 MB"
+    ? "📸 أرسل الصورة " + nextNum + " الآن.\n⚠️ الحد الأقصى لحجم الصورة: 5 ميغابايت"
+    : "📸 Send image " + nextNum + " now.\n⚠️ Maximum image size: 5 MB"
   );
 });
 
 bot.action("img2_no", async ctx => {
   const state = getState(ctx);
-  if (state.step !== "imageUpload" || state.images.length !== 1) {
+  if (state.step !== "imageUpload" || state.images.length === 0) {
     await ctx.reply(state.lang === "ar" ? "⚠️ غير متاح الآن." : "⚠️ Not available now.").catch(() => {});
     return;
   }
@@ -572,20 +608,16 @@ bot.action("publish_ad", async ctx => {
     const chatId = String(ctx.chat && ctx.chat.id ? ctx.chat.id : "");
     state.telegramChatId = chatId;
 
+    // Resolve packageId from backend by matching plan name
     let selectedPackageId = null;
-    if (state.selectedPlan === "normal" || state.selectedPlan === "featured") {
-      try {
-        const pkgRes = await axios.get(BACKEND_BASE_URL + "/api/public/packages", { timeout: 10000 });
-        const pkgs = pkgRes.data.packages || [];
-        if (state.selectedPlan === "featured") {
-          const p = pkgs.find(p => p.isFeatured);
-          if (p) selectedPackageId = p.id;
-        } else {
-          const p = pkgs.find(p => !p.isFeatured && p.price > 0);
-          if (p) selectedPackageId = p.id;
-        }
-      } catch (e) { console.error("FETCH PACKAGES ERROR:", e.message); }
-    }
+    const planNameMap = { free: "Free", basic: "Basic", uaeflag: "UAE Flag", standard: "Standard", premium: "Premium" };
+    try {
+      const pkgRes = await axios.get(BACKEND_BASE_URL + "/api/public/packages", { timeout: 10000 });
+      const pkgs = pkgRes.data.packages || [];
+      const targetName = planNameMap[state.selectedPlan];
+      const matched = pkgs.find(p => p.name === targetName);
+      if (matched) selectedPackageId = matched.id;
+    } catch (e) { console.error("FETCH PACKAGES ERROR:", e.message); }
 
     const total = planTotal(state);
     const payload = {
@@ -607,7 +639,7 @@ bot.action("publish_ad", async ctx => {
     };
 
     const res = await axios.post(BACKEND_BASE_URL + "/api/telegram-ad", payload, {
-      timeout: 20000,
+      timeout: 60000,
       headers: { "Content-Type": "application/json" },
     });
 
@@ -616,17 +648,26 @@ bot.action("publish_ad", async ctx => {
     state.submissionId = submissionId;
 
     if (total === 0) {
-      const adUrl = (res.data && res.data.adUrl) ? res.data.adUrl : PUBLIC_URL + "/ad/" + submissionId;
-      const facebookUrl = res.data && res.data.facebookUrl ? res.data.facebookUrl : null;
-      const instagramUrl = res.data && res.data.instagramUrl ? res.data.instagramUrl : null;
-      const platforms = Array.isArray(state.publishPlatform) ? state.publishPlatform : [state.publishPlatform];
+      const data = res.data || {};
+      const adId = data.adId || submissionId;
+      const adUrl = PUBLIC_URL + "/ad/" + adId;
+      const platforms = Array.isArray(state.publishPlatform) ? state.publishPlatform : (state.publishPlatform || "").split(",").filter(Boolean);
 
-      // Build links list
+      // Build a clean list showing the ad link + which platforms it's being published to
       const links = [];
-      if (platforms.includes("website"))   links.push("🌍 " + (state.lang === "ar" ? "الموقع" : "Website") + ":\n" + adUrl);
-      if (facebookUrl)                     links.push("📘 " + (state.lang === "ar" ? "فيسبوك" : "Facebook") + ":\n" + facebookUrl);
-      if (instagramUrl)                    links.push("📷 " + (state.lang === "ar" ? "انستقرام" : "Instagram") + ":\n" + instagramUrl);
-      if (platforms.includes("telegram"))  links.push("📱 " + (state.lang === "ar" ? "قناة تيليغرام" : "Telegram Channel"));
+      links.push("🔗 " + (state.lang === "ar" ? "رابط الإعلان" : "Ad link") + ":\n" + adUrl);
+
+      // Show which platforms are receiving the ad
+      const publishedTo = [];
+      if (platforms.includes("website"))   publishedTo.push("🌍 " + (state.lang === "ar" ? "الموقع" : "Website"));
+      if (platforms.includes("facebook"))  publishedTo.push("📘 Facebook");
+      if (platforms.includes("instagram")) publishedTo.push("📷 Instagram");
+      if (platforms.includes("x"))         publishedTo.push("✖️ X");
+      if (platforms.includes("telegram"))  publishedTo.push("📱 " + (state.lang === "ar" ? "قناة تيليغرام" : "Telegram Channel"));
+
+      if (publishedTo.length > 0) {
+        links.push((state.lang === "ar" ? "📢 يُنشر على:" : "📢 Publishing to:") + "\n" + publishedTo.join(" · "));
+      }
 
       cleanupImages(state.images);
       const savedPhone = state.phone;
@@ -722,8 +763,8 @@ async function handleAfterPrice(ctx) {
     state.step = "imageAsk";
     await ctx.reply(
       state.lang === "ar"
-        ? "✅ سعر المنتج: " + priceDisplay + "\n\n📸 هل تريد إضافة صور للإعلان؟\n(" + IMG_PRICE + " درهم لكل صورة، صورتان كحد أقصى)"
-        : "✅ Product price: " + priceDisplay + "\n\n📸 Would you like to add images to your ad?\n(" + IMG_PRICE + " AED each, max 2 images)",
+        ? "✅ سعر المنتج: " + priceDisplay + "\n\n📸 هل تريد إضافة صور للإعلان؟\n(حتى " + planMaxImages(state.selectedPlan) + " صور)"
+        : "✅ Product price: " + priceDisplay + "\n\n📸 Would you like to add images to your ad?\n(Up to " + planMaxImages(state.selectedPlan) + " images)",
       Markup.inlineKeyboard([[
         Markup.button.callback(state.lang === "ar" ? "✅ نعم، أضف صور" : "✅ Yes, add images", "img_yes"),
         Markup.button.callback(state.lang === "ar" ? "❌ لا، تخطَّ" : "❌ No, skip", "img_no"),
@@ -739,15 +780,15 @@ async function sendSummary(ctx) {
   const state = getState(ctx);
   state.step = "summary";
   const total     = planTotal(state);
-  const imgCost   = state.images.length * IMG_PRICE;
-  const planBase  = state.selectedPlan === "normal" ? NORMAL_BASE : 0;
-  const planExtra = state.selectedPlan === "featured" ? FEATURED_ADD : 0;
   const priceDisplay = state.isNegotiable
     ? (state.lang === "ar" ? "قابل للتفاوض" : "Negotiable")
     : (state.adPrice != null ? state.adPrice + " AED" : (state.lang === "ar" ? "غير محدد" : "Not specified"));
-  const planLabelAr = state.selectedPlan === "featured" ? "مميز ⭐" : state.selectedPlan === "normal" ? "عادي 📦" : "مجاني 🆓";
-  const planLabelEn = state.selectedPlan === "featured" ? "Featured ⭐" : state.selectedPlan === "normal" ? "Normal 📦" : "Free 🆓";
-  const platLabels = { telegram: { ar: "تيليغرام", en: "Telegram" }, website: { ar: "الموقع", en: "Website" }, facebook: { ar: "فيسبوك", en: "Facebook" }, instagram: { ar: "انستقرام", en: "Instagram" } };
+  const planLabelsAr = { free: "مجاني 🆓", basic: "أساسي 📦", uaeflag: "علم الإمارات 🇦🇪", standard: "قياسي ⭐", premium: "بريميوم 💎" };
+  const planLabelsEn = { free: "Free 🆓", basic: "Basic 📦", uaeflag: "UAE Flag 🇦🇪", standard: "Standard ⭐", premium: "Premium 💎" };
+  const planLabelAr = planLabelsAr[state.selectedPlan] || "مجاني 🆓";
+  const planLabelEn = planLabelsEn[state.selectedPlan] || "Free 🆓";
+  const limits = PLAN_LIMITS[state.selectedPlan] || PLAN_LIMITS.free;
+  const platLabels = { telegram: { ar: "تيليغرام", en: "Telegram" }, website: { ar: "الموقع", en: "Website" }, facebook: { ar: "فيسبوك", en: "Facebook" }, instagram: { ar: "انستقرام", en: "Instagram" }, x: { ar: "X", en: "X" } };
   const platforms = Array.isArray(state.publishPlatform) ? state.publishPlatform : (state.publishPlatform || "website").split(",");
   const platformLabelAr = platforms.map(p => (platLabels[p] || { ar: p }).ar).join(" + ");
   const platformLabelEn = platforms.map(p => (platLabels[p] || { en: p }).en).join(" + ");
@@ -767,8 +808,8 @@ async function sendSummary(ctx) {
       "📄 الوصف:\n" + state.text + "\n\n" +
       "💰 سعر المنتج: " + priceDisplay + "\n\n" +
       "🧾 تفاصيل التكلفة:\n" +
-      "• الباقة (" + planLabelAr + "): " + (planBase + planExtra) + " درهم\n" +
-      "• الصور (" + state.images.length + "): " + imgCost + " درهم\n" +
+      "• الباقة (" + planLabelAr + "): " + limits.price + " درهم\n" +
+      "• " + limits.maxChars + " حرف · " + state.images.length + "/" + limits.maxImages + " صور · " + limits.displayDays + " أيام\n" +
       "━━━━━━━━━━━━━━━━━━━━\n" +
       "💵 الإجمالي: " + total + " درهم" +
       freeNote + "\n\n" +
@@ -793,8 +834,8 @@ async function sendSummary(ctx) {
       "📄 Description:\n" + state.text + "\n\n" +
       "💰 Product price: " + priceDisplay + "\n\n" +
       "🧾 Cost breakdown:\n" +
-      "• Plan (" + planLabelEn + "): " + (planBase + planExtra) + " AED\n" +
-      "• Images (" + state.images.length + "): " + imgCost + " AED\n" +
+      "• Plan (" + planLabelEn + "): " + limits.price + " AED\n" +
+      "• " + limits.maxChars + " chars · " + state.images.length + "/" + limits.maxImages + " images · " + limits.displayDays + " days\n" +
       "━━━━━━━━━━━━━━━━━━━━\n" +
       "💵 Total: " + total + " AED" +
       freeNote + "\n\n" +
@@ -957,15 +998,15 @@ bot.on("text", async ctx => {
     state.title = msg;
     state.step = "text";
     await ctx.reply(state.lang === "ar"
-      ? "✅ العنوان: " + msg + "\n\n📄 اكتب وصف الإعلان:\n• الحد الأقصى: " + MAX_DESC_CHARS + " حرفاً\n• مسموح بالعربية والإنجليزية\n• ممنوع الإيموجي والكلمات المحظورة"
-      : "✅ Title: " + msg + "\n\n📄 Write your ad description:\n• Maximum: " + MAX_DESC_CHARS + " characters\n• Arabic and English allowed\n• No emoji or banned words"
+      ? "✅ العنوان: " + msg + "\n\n📄 اكتب وصف الإعلان:\n• الحد الأقصى: " + planMaxChars(state.selectedPlan) + " حرفاً\n• مسموح بالعربية والإنجليزية\n• ممنوع الإيموجي والكلمات المحظورة"
+      : "✅ Title: " + msg + "\n\n📄 Write your ad description:\n• Maximum: " + planMaxChars(state.selectedPlan) + " characters\n• Arabic and English allowed\n• No emoji or banned words"
     );
     return;
   }
 
   if (state.step === "text") {
     if (msg.length < 10) { await ctx.reply(state.lang === "ar" ? "❌ الوصف قصير جداً (10 أحرف على الأقل)" : "❌ Description too short (minimum 10 characters)"); return; }
-    if (msg.length > MAX_DESC_CHARS) { await ctx.reply(state.lang === "ar" ? "❌ الوصف طويل جداً. الحد الأقصى " + MAX_DESC_CHARS + " حرفاً. (أحرفك الحالية: " + msg.length + ")" : "❌ Description too long. Maximum " + MAX_DESC_CHARS + " characters. (Yours: " + msg.length + ")"); return; }
+    if (msg.length > planMaxChars(state.selectedPlan)) { await ctx.reply(state.lang === "ar" ? "❌ الوصف طويل جداً. الحد الأقصى " + planMaxChars(state.selectedPlan) + " حرفاً. (أحرفك الحالية: " + msg.length + ")" : "❌ Description too long. Maximum " + planMaxChars(state.selectedPlan) + " characters. (Yours: " + msg.length + ")"); return; }
     if (hasEmoji(msg)) { await ctx.reply(state.lang === "ar" ? "❌ لا يُسمح بالإيموجي في الوصف" : "❌ Emoji is not allowed in the description"); return; }
     if (hasBanned(msg)) { await ctx.reply(state.lang === "ar" ? "❌ الوصف يحتوي على كلمات محظورة" : "❌ Description contains banned words"); return; }
     state.text = msg;
@@ -1016,8 +1057,8 @@ bot.on("photo", async ctx => {
       : "❌ Please send ONE image at a time, not an album.");
     return;
   }
-  if (state.images.length >= MAX_IMAGES) {
-    await ctx.reply(state.lang === "ar" ? "❌ الحد الأقصى " + MAX_IMAGES + " صور." : "❌ Maximum " + MAX_IMAGES + " images allowed.");
+  if (state.images.length >= planMaxImages(state.selectedPlan)) {
+    await ctx.reply(state.lang === "ar" ? "❌ الحد الأقصى " + planMaxImages(state.selectedPlan) + " صور." : "❌ Maximum " + planMaxImages(state.selectedPlan) + " images allowed.");
     return;
   }
   const photos = ctx.message.photo || [];
@@ -1054,10 +1095,13 @@ bot.on("photo", async ctx => {
   state.images.push({ fileId, localPath: dl.localPath, bytes: dl.bytes });
   state.expectingImage = false;
 
-  if (state.images.length === 1) {
+  const maxImgs = planMaxImages(state.selectedPlan);
+  if (state.images.length < maxImgs) {
+    const countAr = state.images.length;
+    const remainAr = maxImgs - state.images.length;
     await ctx.reply(state.lang === "ar"
-      ? "✅ تم استلام الصورة الأولى بنجاح.\n\nهل تريد إضافة صورة ثانية؟"
-      : "✅ First image received successfully.\n\nWould you like to add a second image?",
+      ? "✅ تم استلام الصورة " + countAr + " بنجاح.\n\nهل تريد إضافة صورة أخرى؟ (متبقي " + remainAr + ")"
+      : "✅ Image " + countAr + " received.\n\nAdd another image? (" + remainAr + " remaining)",
       Markup.inlineKeyboard([[
         Markup.button.callback(state.lang === "ar" ? "✅ نعم" : "✅ Yes", "img2_yes"),
         Markup.button.callback(state.lang === "ar" ? "❌ لا" : "❌ No", "img2_no"),

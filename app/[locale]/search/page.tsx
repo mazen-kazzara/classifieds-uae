@@ -11,31 +11,9 @@ export const metadata: Metadata = {
   robots: { index: false },
 };
 
-const CATEGORY_IMAGES: Record<string, string> = {
-  vehicles: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=800&q=80",
-  "real-estate": "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&q=80",
-  electronics: "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=800&q=80",
-  jobs: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800&q=80",
-  services: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&q=80",
-  salons: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&q=80",
-  clinics: "https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=800&q=80",
-  furniture: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&q=80",
-  education: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&q=80",
-  other: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=800&q=80",
-};
-function getCategoryImage(category: string): string {
-  const s = category.toLowerCase().replace(/ /g, "-").replace(/&/g, "").replace(/--/g, "-");
-  return CATEGORY_IMAGES[s] || CATEGORY_IMAGES["other"];
-}
+import { getCategories, getCatArMap, getCategoryImageMap, getCategoryImage } from "@/lib/categories";
 
 interface Props { searchParams: Promise<{ q?: string; type?: string; category?: string; featured?: string; page?: string }>; params: Promise<{ locale: string }> }
-
-
-const CAT_AR: Record<string, string> = {
-  vehicles: "مركبات", "real-estate": "عقارات", electronics: "إلكترونيات",
-  jobs: "وظائف", services: "خدمات", salons: "صالونات وتجميل", "salons-beauty": "صالونات وتجميل", "salons-&-beauty": "صالونات وتجميل", "salons & beauty": "صالونات وتجميل",
-  clinics: "عيادات", furniture: "أثاث", education: "تعليم", other: "أخرى",
-};
 export default async function SearchPage({ searchParams, params }: Props) {
   const { locale } = await params;
   const sp = await searchParams;
@@ -46,6 +24,9 @@ export default async function SearchPage({ searchParams, params }: Props) {
   const page = Math.max(parseInt(sp.page || "1"), 1);
   const LIMIT = 20;
   const now = new Date();
+  const allCats = await getCategories();
+  const CAT_AR = getCatArMap(allCats);
+  const CATEGORY_IMAGES = getCategoryImageMap(allCats);
 
   let categoryName: string | undefined;
   if (categorySlug) {
@@ -54,7 +35,7 @@ export default async function SearchPage({ searchParams, params }: Props) {
   }
 
   const where: any = {
-    status: "PUBLISHED", expiresAt: { gt: now },
+    status: "PUBLISHED", expiresAt: { gt: now }, deletedAt: null,
     ...(query ? { OR: [{ title: { contains: query, mode: "insensitive" } }, { description: { contains: query, mode: "insensitive" } }] } : {}),
     ...(contentType !== "all" ? { contentType } : {}),
     ...(categoryName ? { category: { equals: categoryName, mode: "insensitive" } } : {}),
@@ -129,7 +110,7 @@ export default async function SearchPage({ searchParams, params }: Props) {
                       <div className="relative h-40 bg-gray-100 overflow-hidden">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
-                          src={image ? (image.url.startsWith("/") ? image.url : `/uploads/${image.url}`) : getCategoryImage(ad.category)}
+                          src={image ? (image.url.startsWith("/") ? image.url : `/uploads/${image.url}`) : getCategoryImage(ad.category, CATEGORY_IMAGES)}
                           alt={title}
                           loading="eager"
                           style={image ? {} : { opacity: 0.5 }}

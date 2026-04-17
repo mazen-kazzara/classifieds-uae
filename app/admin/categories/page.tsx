@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { useAdminLocale } from "../useAdminLocale";
 
-interface Category { id: string; name: string; nameAr: string; slug: string; icon?: string; isActive: boolean; sortOrder: number; }
+interface Category { id: string; name: string; nameAr: string; slug: string; icon?: string; imageUrl?: string; isActive: boolean; sortOrder: number; parentId?: string | null; }
 
 const cardStyle: React.CSSProperties = { backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)" };
 const inputStyle: React.CSSProperties = { width: "100%", padding: "0.5rem 0.75rem", borderRadius: "var(--radius-md)", border: "1.5px solid var(--border)", backgroundColor: "var(--surface-2)", color: "var(--text)", fontSize: "0.8125rem", outline: "none", boxSizing: "border-box" };
@@ -11,24 +11,38 @@ export default function CategoriesPage() {
   const { isAr, t } = useAdminLocale();
   const [categories, setCategories] = useState<Category[]>([]);
   const [loading, setLoading] = useState(true);
-  const [form, setForm] = useState({ name: "", nameAr: "", slug: "", icon: "", sortOrder: 0 });
+  const [form, setForm] = useState({ name: "", nameAr: "", slug: "", icon: "", imageUrl: "", sortOrder: 0, parentId: "" });
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [search, setSearch] = useState("");
+
+  const filteredCategories = search.trim()
+    ? categories.filter(c => {
+        const q = search.toLowerCase();
+        return c.name.toLowerCase().includes(q) || c.nameAr.includes(search) || c.slug.toLowerCase().includes(q);
+      })
+    : categories;
 
   async function load() { const d = await (await fetch("/api/admin/categories")).json(); if (d.ok) setCategories(d.categories); setLoading(false); }
   useEffect(() => { load(); }, []);
 
   async function handleSave() {
     setSaving(true); setMsg("");
-    const d = await (await fetch("/api/admin/categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, isActive: true }) })).json();
+    const d = await (await fetch("/api/admin/categories", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...form, parentId: form.parentId || null, isActive: true }) })).json();
     setSaving(false);
-    if (d.ok) { setMsg(t("Saved", "تم الحفظ")); setForm({ name: "", nameAr: "", slug: "", icon: "", sortOrder: 0 }); load(); }
+    if (d.ok) { setMsg(t("Saved", "تم الحفظ")); setForm({ name: "", nameAr: "", slug: "", icon: "", imageUrl: "", sortOrder: 0, parentId: "" }); load(); }
     else setMsg(t("Error", "خطأ") + ": " + d.error);
   }
 
   async function handleDelete(id: string) {
     if (!confirm(t("Delete this category?", "حذف هذه الفئة؟"))) return;
-    await fetch("/api/admin/categories", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    const otp = window.prompt(t("Enter your 2FA code to confirm:", "أدخل رمز المصادقة الثنائية للتأكيد:"));
+    if (!otp || !/^\d{6}$/.test(otp)) { setMsg(t("Invalid 2FA code", "رمز 2FA غير صالح")); return; }
+    const res = await fetch("/api/admin/categories", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, otp }) });
+    const data = await res.json();
+    if (data.softDeleted) setMsg(t(data.message || "Marked inactive", "تم إخفاء الفئة"));
+    else if (data.ok) setMsg(t("Deleted", "تم الحذف"));
+    else setMsg(t("Error: " + (data.error || "Unknown"), "خطأ: " + (data.error || "غير معروف")));
     load();
   }
 
@@ -48,13 +62,21 @@ export default function CategoriesPage() {
               { label: t("Name (English)", "الاسم (إنجليزي)"), key: "name", placeholder: "Vehicles" },
               { label: t("Name (Arabic)", "الاسم (عربي)"), key: "nameAr", placeholder: "سيارات" },
               { label: t("Slug", "الرابط"), key: "slug", placeholder: "vehicles" },
-              { label: t("Icon (emoji)", "أيقونة"), key: "icon", placeholder: "" },
+              { label: t("Icon (emoji)", "أيقونة"), key: "icon", placeholder: "🚗" },
+              { label: t("Image URL", "رابط الصورة"), key: "imageUrl", placeholder: "https://images.unsplash.com/photo-..." },
             ].map(f => (
               <div key={f.key}>
                 <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: "0.25rem", display: "block" }}>{f.label}</label>
                 <input style={inputStyle} type="text" placeholder={f.placeholder} value={form[f.key as keyof typeof form] as string} onChange={e => setForm({ ...form, [f.key]: e.target.value })} />
               </div>
             ))}
+            <div>
+              <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: "0.25rem", display: "block" }}>{t("Parent Category (optional)", "الفئة الرئيسية (اختياري)")}</label>
+              <select style={inputStyle} value={form.parentId} onChange={e => setForm({ ...form, parentId: e.target.value })}>
+                <option value="">{t("None (Main Category)", "بدون (فئة رئيسية)")}</option>
+                {categories.filter(c => !c.parentId).map(c => <option key={c.id} value={c.id}>{isAr ? c.nameAr : c.name}</option>)}
+              </select>
+            </div>
             <div>
               <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: "0.25rem", display: "block" }}>{t("Sort Order", "الترتيب")}</label>
               <input style={inputStyle} type="number" value={form.sortOrder} onChange={e => setForm({ ...form, sortOrder: Number(e.target.value) })} />
@@ -69,19 +91,27 @@ export default function CategoriesPage() {
         {/* List */}
         <div style={cardStyle}>
           <div style={{ padding: "1rem", borderBottom: "1.5px solid var(--border)" }}>
-            <h2 style={{ color: "var(--text)", fontWeight: 700, fontSize: "0.9375rem" }}>{t("All Categories", "جميع الفئات")} ({categories.length})</h2>
+            <h2 style={{ color: "var(--text)", fontWeight: 700, fontSize: "0.9375rem", marginBottom: "0.5rem" }}>{t("All Categories", "جميع الفئات")} ({filteredCategories.length}{search ? `/${categories.length}` : ""})</h2>
+            <input
+              type="text"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder={t("Search…", "بحث…")}
+              style={{ ...inputStyle, padding: "0.375rem 0.625rem", fontSize: "0.75rem" }}
+            />
           </div>
           <div style={{ maxHeight: 500, overflowY: "auto" }}>
-            {categories.map(cat => (
+            {filteredCategories.map(cat => (
               <div key={cat.id} style={{ padding: "0.75rem 1rem", borderBottom: "1px solid var(--border)", display: "flex", justifyContent: "space-between", alignItems: "center", gap: "0.75rem" }}>
                 <div>
                   <p style={{ fontWeight: 600, fontSize: "0.8125rem", color: "var(--text)" }}>{isAr ? cat.nameAr : cat.name}</p>
-                  <p style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>{cat.slug} · {t("order", "ترتيب")} {cat.sortOrder}</p>
+                  <p style={{ fontSize: "0.65rem", color: "var(--text-muted)" }}>{cat.slug} · {t("order", "ترتيب")} {cat.sortOrder}{cat.parentId ? ` · ${t("sub", "فرعي")}` : ""}</p>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: "0.375rem" }}>
                   <span style={{ fontSize: "0.65rem", fontWeight: 700, padding: "0.15rem 0.5rem", borderRadius: 999, backgroundColor: cat.isActive ? "color-mix(in srgb, #22C55E 15%, var(--surface))" : "color-mix(in srgb, var(--text-muted) 15%, var(--surface))", color: cat.isActive ? "#22C55E" : "var(--text-muted)" }}>
                     {cat.isActive ? t("Active", "نشط") : t("Hidden", "مخفي")}
                   </span>
+                  <button onClick={() => setForm({ name: cat.name, nameAr: cat.nameAr, slug: cat.slug, icon: cat.icon || "", imageUrl: cat.imageUrl || "", sortOrder: cat.sortOrder, parentId: cat.parentId || "" })} style={{ padding: "0.25rem 0.5rem", borderRadius: "var(--radius-md)", fontSize: "0.7rem", fontWeight: 600, border: "1.5px solid var(--border)", backgroundColor: "var(--surface)", color: "var(--text-muted)", cursor: "pointer" }}>{t("Edit", "تعديل")}</button>
                   <button onClick={() => handleDelete(cat.id)} style={{ padding: "0.25rem 0.5rem", borderRadius: "var(--radius-md)", fontSize: "0.7rem", fontWeight: 600, border: "1.5px solid var(--danger)", backgroundColor: "var(--surface)", color: "var(--danger)", cursor: "pointer" }}>{t("Delete", "حذف")}</button>
                 </div>
               </div>

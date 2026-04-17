@@ -104,59 +104,106 @@ export async function POST(req: Request) {
           buttons.push({ text: "🔗 View Ad", url: adUrl });
           const replyMarkup = { inline_keyboard: [buttons] };
 
-          const firstMedia = submission.submissionMedia?.[0];
-          const photoUrl = firstMedia
-            ? `${APP_URL}${firstMedia.tempKey.startsWith("/") ? firstMedia.tempKey : `/uploads/${firstMedia.tempKey}`}`
-            : null;
-
+          // All media URLs — use sendMediaGroup if >1, sendPhoto otherwise.
+          const allMedia = (submission.submissionMedia || [])
+            .map((m: any) => `${APP_URL}/uploads/${m.tempKey.replace(/^\/?(uploads\/)?/, "")}`);
           let sent = false;
-          if (photoUrl) {
+
+          if (allMedia.length > 1) {
+            const mediaGroup = allMedia.map((url: string, i: number) => ({
+              type: "photo",
+              media: url,
+              ...(i === 0 ? { caption: caption.slice(0, 1024) } : {}),
+            }));
+            const tgRes = await fetch(`https://api.telegram.org/bot${BOT}/sendMediaGroup`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: CHAN, media: mediaGroup }),
+            }).catch(() => null);
+            const tgJson = await tgRes?.json().catch(() => null);
+            if (tgJson?.ok && Array.isArray(tgJson.result)) {
+              sent = true;
+              const allMsgIds = tgJson.result.map((r: any) => r.message_id).filter(Boolean);
+              // Buttons as follow-up
+              const btnRes = await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chat_id: CHAN, text: `🔗 ${adUrl}`, reply_markup: replyMarkup }),
+              }).catch(() => null);
+              const btnJson = await btnRes?.json().catch(() => null);
+              if (btnJson?.result?.message_id) allMsgIds.push(btnJson.result.message_id);
+              if (allMsgIds.length > 0) {
+                await prisma.ad.update({ where: { id: ad.id }, data: { telegramMessageId: allMsgIds.join(",") } });
+              }
+              console.log("SUCCESS ROUTE: channel sendMediaGroup OK, ids=", allMsgIds);
+            }
+          } else if (allMedia.length === 1) {
             const tgRes = await fetch(`https://api.telegram.org/bot${BOT}/sendPhoto`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chat_id: CHAN, photo: photoUrl, caption: caption.slice(0, 1024), reply_markup: replyMarkup }),
+              body: JSON.stringify({ chat_id: CHAN, photo: allMedia[0], caption: caption.slice(0, 1024), reply_markup: replyMarkup }),
             }).catch(() => null);
             const tgJson = await tgRes?.json().catch(() => null);
             if (tgJson?.ok) {
-              console.log("SUCCESS ROUTE: channel sendPhoto OK");
               sent = true;
-            } else {
-              console.error("SUCCESS ROUTE: channel sendPhoto failed:", JSON.stringify(tgJson));
+              if (tgJson.result?.message_id) {
+                await prisma.ad.update({ where: { id: ad.id }, data: { telegramMessageId: String(tgJson.result.message_id) } });
+              }
+              console.log("SUCCESS ROUTE: channel sendPhoto OK");
             }
           }
+
           if (!sent) {
-            await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
+            const tgRes = await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ chat_id: CHAN, text: caption.slice(0, 4096), reply_markup: replyMarkup }),
-            }).catch((e: unknown) => console.error("SUCCESS ROUTE: channel sendMessage failed:", e));
+            }).catch(() => null);
+            const tgJson = await tgRes?.json().catch(() => null);
+            if (tgJson?.ok && tgJson.result?.message_id) {
+              await prisma.ad.update({ where: { id: ad.id }, data: { telegramMessageId: String(tgJson.result.message_id) } });
+            }
           }
         }
       }
 
-      // ── Facebook + Instagram ──────────────────────────────────────────
-      if (pubTarget.includes("facebook") || pubTarget.includes("instagram")) {
-        const firstMedia = submission.submissionMedia?.[0];
-        const imageUrl = firstMedia
-          ? `${APP_URL}${firstMedia.tempKey.startsWith("/") ? firstMedia.tempKey : `/uploads/${firstMedia.tempKey}`}`
-          : null;
+      // ── Facebook + Instagram + X ──────────────────────────────────────
+      if (pubTarget.includes("facebook") || pubTarget.includes("instagram") || pubTarget.includes("x")) {
+        const allImageUrls = (submission.submissionMedia || []).map((m: any) =>
+          `${APP_URL}/uploads/${m.tempKey.replace(/^\/?(uploads\/)?/, "")}`
+        );
+        const imageUrl = allImageUrls[0] ?? null;
         const contactLines: string[] = [];
         if (hasCall && rawPhone) contactLines.push(`📞 +${rawPhone}`);
         if (hasWA) contactLines.push(`💬 wa.me/${rawWaNum}`);
         if (hasTg) contactLines.push(`✈️ @${tgUsername}`);
 
-        publishToSocial({
-          title: ad.title || "",
-          description: ad.description || "",
-          category: ad.category,
-          adUrl,
-          imageUrl,
-          adPrice: (submission as any).adPrice ?? null,
-          isNegotiable: (submission as any).isNegotiable ?? false,
-          contactLines,
-          publishFacebook: pubTarget.includes("facebook"),
-          publishInstagram: pubTarget.includes("instagram"),
-        }).catch(e => console.error("SUCCESS ROUTE: social publish error:", e));
+        try {
+          const socialResult = await publishToSocial({
+            title: ad.title || "",
+            description: ad.description || "",
+            category: ad.category,
+            adUrl,
+            imageUrl,
+            allImageUrls,
+            adPrice: (submission as any).adPrice ?? null,
+            isNegotiable: (submission as any).isNegotiable ?? false,
+            contactLines,
+            publishFacebook: pubTarget.includes("facebook"),
+            publishInstagram: pubTarget.includes("instagram"),
+            publishX: pubTarget.includes("x"),
+          });
+          const socialIds: Record<string, string> = {};
+          if (socialResult.facebookPostId) socialIds.facebookPostId = socialResult.facebookPostId;
+          if (socialResult.instagramPostId) socialIds.instagramPostId = socialResult.instagramPostId;
+          if (socialResult.xPostId) socialIds.twitterPostId = socialResult.xPostId;
+          if (Object.keys(socialIds).length > 0) {
+            await prisma.ad.update({ where: { id: ad.id }, data: socialIds });
+            console.log("SUCCESS ROUTE: social IDs saved for ad=", ad.id, socialIds);
+          }
+        } catch (e) {
+          console.error("SUCCESS ROUTE: social publish error:", e);
+        }
       }
     }
 

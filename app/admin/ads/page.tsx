@@ -7,6 +7,8 @@ interface Ad {
   id: string; title?: string; category: string; status: string; contentType: string;
   isFeatured: boolean; isPinned: boolean; publishedAt?: string; expiresAt: string;
   viewsCount: number; description: string; adPrice?: number; isNegotiable?: boolean;
+  telegramMessageId?: string | null; facebookPostId?: string | null; instagramPostId?: string | null; twitterPostId?: string | null;
+  deletedAt?: string | null;
 }
 
 const cardStyle: React.CSSProperties = { backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", overflow: "hidden" };
@@ -23,21 +25,103 @@ export default function AdsPage() {
   const [editAd, setEditAd] = useState<Ad | null>(null);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
+  const [msgType, setMsgType] = useState<"success" | "error">("success");
+  const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [viewFilter, setViewFilter] = useState<"active" | "deleted" | "all">("active");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => { setDebouncedSearch(search); setPage(1); }, 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   function fetchAds() {
     setLoading(true);
-    fetch(`/api/ads?limit=20&page=${page}`).then(r => r.json()).then(d => {
+    const params = new URLSearchParams({ limit: "20", page: String(page), view: viewFilter });
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    if (statusFilter) params.set("status", statusFilter);
+    fetch(`/api/admin/ads?${params.toString()}`).then(r => r.json()).then(d => {
       if (d.ok) { setAds(d.ads); setTotal(d.totalCount); }
       setLoading(false);
     });
   }
 
-  useEffect(() => { fetchAds(); }, [page]);
+  useEffect(() => { fetchAds(); }, [page, debouncedSearch, statusFilter, viewFilter]);
+
+  async function promptOtpAndCall(url: string, method: "POST" | "DELETE" = "DELETE"): Promise<any> {
+    const otp = window.prompt(t("Enter your 2FA code to confirm:", "أدخل رمز المصادقة الثنائية للتأكيد:"));
+    if (!otp || !/^\d{6}$/.test(otp)) {
+      return { ok: false, error: "INVALID_OTP" };
+    }
+    const res = await fetch(url, {
+      method,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ otp }),
+    });
+    return await res.json();
+  }
 
   async function handleDelete(id: string) {
-    if (!confirm(t("Are you sure you want to delete this ad?", "هل أنت متأكد من حذف هذا الإعلان؟"))) return;
-    const res = await fetch(`/api/admin/ads/${id}`, { method: "DELETE" });
-    if ((await res.json()).ok) { setMsg(t("Ad deleted", "تم حذف الإعلان")); fetchAds(); }
+    const ad = ads.find(a => a.id === id);
+    const channels = ["Website"];
+    if (ad?.telegramMessageId) channels.push("Telegram");
+    if (ad?.facebookPostId) channels.push("Facebook");
+    if (ad?.instagramPostId) channels.push("Instagram");
+    if (ad?.twitterPostId) channels.push("X");
+    const confirmMsg = t(
+      `Delete this ad from: ${channels.join(", ")}?\n\nIt will be removed from all channels immediately and can be restored within 7 days.`,
+      `حذف هذا الإعلان من: ${channels.join(", ")}?\n\nسيتم إزالته من جميع القنوات فوراً ويمكن استعادته خلال 7 أيام.`
+    );
+    if (!confirm(confirmMsg)) return;
+    try {
+      const data = await promptOtpAndCall(`/api/admin/ads/${id}`, "DELETE");
+      if (data.ok) {
+        setMsgType("success");
+        const deletedFrom = data.deletedFrom?.join(", ") || "website";
+        setMsg(t(`Ad soft-deleted (recoverable for 7 days). Removed from: ${deletedFrom}`, `تم حذف الإعلان مؤقتاً (قابل للاستعادة لـ 7 أيام). أُزيل من: ${deletedFrom}`));
+        fetchAds();
+      } else if (data.error === "2FA_REQUIRED") {
+        setMsgType("error"); setMsg(t("Invalid 2FA code", "رمز 2FA غير صالح"));
+      } else if (data.error === "2FA_NOT_ENABLED") {
+        setMsgType("error"); setMsg(t("Enable 2FA first (Admin → 2FA Security)", "فعّل المصادقة الثنائية أولاً (الإدارة ← 2FA)"));
+      } else if (data.error === "INVALID_OTP") {
+        setMsgType("error"); setMsg(t("Enter a valid 6-digit code", "أدخل رمز صحيح من 6 أرقام"));
+      } else {
+        setMsgType("error"); setMsg(t("Failed: " + (data.error || "Unknown"), "فشل: " + (data.error || "غير معروف")));
+      }
+    } catch {
+      setMsgType("error"); setMsg(t("Failed to delete ad", "فشل حذف الإعلان"));
+    }
+  }
+
+  async function handleRestore(id: string) {
+    if (!confirm(t("Restore this ad? It will be republished on the website only (not to social channels).", "استعادة هذا الإعلان؟ سيُنشر على الموقع فقط (ليس على القنوات الاجتماعية)."))) return;
+    try {
+      const res = await fetch(`/api/admin/ads/${id}/restore`, { method: "POST" });
+      const data = await res.json();
+      if (data.ok) {
+        setMsgType("success"); setMsg(t("Ad restored", "تمت الاستعادة"));
+        fetchAds();
+      } else {
+        setMsgType("error"); setMsg(t("Failed: " + (data.error || "Unknown"), "فشل: " + (data.error || "غير معروف")));
+      }
+    } catch { setMsgType("error"); setMsg(t("Failed to restore", "فشل الاستعادة")); }
+  }
+
+  async function handleHardDelete(id: string) {
+    if (!confirm(t("PERMANENTLY delete this ad from the database? This cannot be undone.", "حذف هذا الإعلان نهائياً من قاعدة البيانات؟ لا يمكن التراجع."))) return;
+    try {
+      const data = await promptOtpAndCall(`/api/admin/ads/${id}/hard-delete`, "DELETE");
+      if (data.ok) {
+        setMsgType("success"); setMsg(t("Ad permanently deleted", "تم الحذف النهائي"));
+        fetchAds();
+      } else if (data.error === "INVALID_OTP") {
+        setMsgType("error"); setMsg(t("Enter a valid 6-digit code", "أدخل رمز صحيح"));
+      } else {
+        setMsgType("error"); setMsg(t("Failed: " + (data.error || "Unknown"), "فشل: " + (data.error || "غير معروف")));
+      }
+    } catch { setMsgType("error"); setMsg(t("Failed", "فشل")); }
   }
 
   async function handleSaveEdit() {
@@ -52,7 +136,9 @@ export default function AdsPage() {
       }),
     });
     setSaving(false);
-    if ((await res.json()).ok) { setMsg(t("Ad updated", "تم تحديث الإعلان")); setEditAd(null); fetchAds(); }
+    const data = await res.json();
+    if (data.ok) { setMsgType("success"); setMsg(t("Ad updated", "تم تحديث الإعلان")); setEditAd(null); fetchAds(); }
+    else { setMsgType("error"); setMsg(t("Failed to update: " + (data.error || "Unknown error"), "فشل التحديث: " + (data.error || "خطأ غير معروف"))); }
   }
 
   function statusBadge(s: string) {
@@ -68,11 +154,56 @@ export default function AdsPage() {
 
   return (
     <div>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem", flexWrap: "wrap", gap: "1rem" }}>
         <h1 style={{ color: "var(--text)", fontWeight: 800, fontSize: "1.5rem" }}>{t("All Ads", "جميع الإعلانات")} ({total})</h1>
       </div>
 
-      {msg && <div style={{ backgroundColor: "color-mix(in srgb, var(--primary) 10%, var(--surface))", border: "1.5px solid var(--primary)", borderRadius: "var(--radius-md)", padding: "0.625rem 1rem", marginBottom: "1rem", color: "var(--primary)", fontSize: "0.8125rem" }} onClick={() => setMsg("")}>{msg}</div>}
+      {/* View tabs */}
+      <div style={{ display: "flex", gap: "0.375rem", marginBottom: "0.75rem" }}>
+        {(["active", "deleted", "all"] as const).map(v => (
+          <button key={v} onClick={() => { setViewFilter(v); setPage(1); }}
+            style={{
+              padding: "0.4rem 0.875rem", borderRadius: 999, fontSize: "0.75rem", fontWeight: 600,
+              border: `1.5px solid ${viewFilter === v ? "var(--primary)" : "var(--border)"}`,
+              backgroundColor: viewFilter === v ? "color-mix(in srgb, var(--primary) 12%, var(--surface))" : "var(--surface)",
+              color: viewFilter === v ? "var(--primary)" : "var(--text-muted)", cursor: "pointer",
+            }}>
+            {v === "active" ? t("Active", "النشط") : v === "deleted" ? t("Deleted (recoverable)", "المحذوف (قابل للاستعادة)") : t("All", "الكل")}
+          </button>
+        ))}
+      </div>
+
+      {/* Search & Filters */}
+      <div style={{ display: "flex", gap: "0.75rem", marginBottom: "1rem", flexWrap: "wrap" }}>
+        <input
+          type="text"
+          value={search}
+          onChange={e => setSearch(e.target.value)}
+          placeholder={t("Search by title, description, ID, category, phone…", "ابحث بالعنوان، الوصف، المعرّف، الفئة، الهاتف…")}
+          style={{
+            flex: 1, minWidth: 240, padding: "0.625rem 1rem", borderRadius: "var(--radius-md)",
+            border: "1.5px solid var(--border)", backgroundColor: "var(--surface)",
+            color: "var(--text)", fontSize: "0.875rem", outline: "none",
+          }}
+        />
+        <select
+          value={statusFilter}
+          onChange={e => { setStatusFilter(e.target.value); setPage(1); }}
+          style={{
+            padding: "0.625rem 1rem", borderRadius: "var(--radius-md)",
+            border: "1.5px solid var(--border)", backgroundColor: "var(--surface)",
+            color: "var(--text)", fontSize: "0.875rem", outline: "none", cursor: "pointer",
+          }}
+        >
+          <option value="">{t("All Statuses", "كل الحالات")}</option>
+          <option value="PUBLISHED">PUBLISHED</option>
+          <option value="EXPIRED">EXPIRED</option>
+          <option value="PENDING">PENDING</option>
+          <option value="REJECTED">REJECTED</option>
+        </select>
+      </div>
+
+      {msg && <div style={{ backgroundColor: msgType === "error" ? "color-mix(in srgb, var(--danger) 10%, var(--surface))" : "color-mix(in srgb, var(--primary) 10%, var(--surface))", border: `1.5px solid ${msgType === "error" ? "var(--danger)" : "var(--primary)"}`, borderRadius: "var(--radius-md)", padding: "0.625rem 1rem", marginBottom: "1rem", color: msgType === "error" ? "var(--danger)" : "var(--primary)", fontSize: "0.8125rem", cursor: "pointer" }} onClick={() => setMsg("")}>{msg}</div>}
 
       {/* Edit Modal */}
       {editAd && (
@@ -144,6 +275,7 @@ export default function AdsPage() {
                   <th style={thStyle}>{t("Ad", "الإعلان")}</th>
                   <th style={thStyle}>{t("Category", "الفئة")}</th>
                   <th style={thStyle}>{t("Status", "الحالة")}</th>
+                  <th style={thStyle}>{t("Channels", "القنوات")}</th>
                   <th style={thStyle}>{t("Views", "المشاهدات")}</th>
                   <th style={thStyle}>{t("Expires", "ينتهي")}</th>
                   <th style={thStyle}>{t("Actions", "إجراءات")}</th>
@@ -158,13 +290,32 @@ export default function AdsPage() {
                     </td>
                     <td style={tdStyle}>{ad.category}</td>
                     <td style={tdStyle}>{statusBadge(ad.status)}</td>
+                    <td style={tdStyle}>
+                      <div style={{ display: "flex", gap: "0.2rem", flexWrap: "wrap" }}>
+                        <span style={{ fontSize: "0.6rem", padding: "0.1rem 0.3rem", borderRadius: 4, backgroundColor: "color-mix(in srgb, var(--primary) 15%, var(--surface))", color: "var(--primary)" }}>Web</span>
+                        {ad.telegramMessageId && <span style={{ fontSize: "0.6rem", padding: "0.1rem 0.3rem", borderRadius: 4, backgroundColor: "color-mix(in srgb, #0088cc 15%, var(--surface))", color: "#0088cc" }}>TG</span>}
+                        {ad.facebookPostId && <span style={{ fontSize: "0.6rem", padding: "0.1rem 0.3rem", borderRadius: 4, backgroundColor: "color-mix(in srgb, #1877F2 15%, var(--surface))", color: "#1877F2" }}>FB</span>}
+                        {ad.instagramPostId && <span style={{ fontSize: "0.6rem", padding: "0.1rem 0.3rem", borderRadius: 4, backgroundColor: "color-mix(in srgb, #E4405F 15%, var(--surface))", color: "#E4405F" }}>IG</span>}
+                        {ad.twitterPostId && <span style={{ fontSize: "0.6rem", padding: "0.1rem 0.3rem", borderRadius: 4, backgroundColor: "color-mix(in srgb, #000 15%, var(--surface))", color: "var(--text)" }}>X</span>}
+                      </div>
+                    </td>
                     <td style={tdStyle}>{ad.viewsCount}</td>
                     <td style={{ ...tdStyle, fontSize: "0.75rem", color: "var(--text-muted)" }}>{new Date(ad.expiresAt).toLocaleDateString("en-AE")}</td>
                     <td style={tdStyle}>
-                      <div style={{ display: "flex", gap: "0.375rem" }}>
-                        <Link href={`/${isAr ? "ar" : "en"}/ad/${ad.id}`} target="_blank" style={{ ...btnSmall, textDecoration: "none" }}>{t("View", "عرض")}</Link>
-                        <button onClick={() => setEditAd(ad)} style={btnSmall}>{t("Edit", "تعديل")}</button>
-                        <button onClick={() => handleDelete(ad.id)} style={{ ...btnSmall, color: "var(--danger)", borderColor: "var(--danger)" }}>{t("Delete", "حذف")}</button>
+                      <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap" }}>
+                        {!ad.deletedAt && (
+                          <>
+                            <Link href={`/${isAr ? "ar" : "en"}/ad/${ad.id}`} target="_blank" style={{ ...btnSmall, textDecoration: "none" }}>{t("View", "عرض")}</Link>
+                            <button onClick={() => setEditAd(ad)} style={btnSmall}>{t("Edit", "تعديل")}</button>
+                            <button onClick={() => handleDelete(ad.id)} style={{ ...btnSmall, color: "var(--danger)", borderColor: "var(--danger)" }}>{t("Delete", "حذف")}</button>
+                          </>
+                        )}
+                        {ad.deletedAt && (
+                          <>
+                            <button onClick={() => handleRestore(ad.id)} style={{ ...btnSmall, color: "var(--primary)", borderColor: "var(--primary)" }}>{t("Restore", "استعادة")}</button>
+                            <button onClick={() => handleHardDelete(ad.id)} style={{ ...btnSmall, color: "var(--danger)", borderColor: "var(--danger)" }}>{t("Purge", "حذف نهائي")}</button>
+                          </>
+                        )}
                       </div>
                     </td>
                   </tr>

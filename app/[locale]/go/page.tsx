@@ -30,6 +30,11 @@ const ThreadsIcon = () => (
     <path d="M12.186 24h-.007c-3.581-.024-6.334-1.205-8.184-3.509C2.35 18.44 1.5 15.586 1.472 12.01v-.017c.03-3.579.879-6.43 2.525-8.482C5.845 1.205 8.6.024 12.18 0h.014c2.746.02 5.043.725 6.826 2.098 1.677 1.29 2.858 3.13 3.509 5.467l-2.04.569c-1.104-3.96-3.898-5.984-8.304-6.015-2.91.022-5.11.936-6.54 2.717C4.307 6.504 3.616 8.914 3.59 12c.025 3.086.718 5.496 2.057 7.164 1.432 1.784 3.631 2.698 6.54 2.717 2.623-.02 4.358-.631 5.8-2.045 1.647-1.613 1.618-3.593 1.09-4.798-.31-.71-.873-1.3-1.634-1.75-.192 1.352-.622 2.446-1.284 3.272-.886 1.102-2.14 1.704-3.73 1.79-1.202.065-2.361-.218-3.259-.801-1.063-.689-1.685-1.74-1.752-2.96-.065-1.187.408-2.248 1.33-2.986.88-.706 2.099-1.107 3.696-1.217 1.074-.074 2.082-.038 3.016.082-.088-.986-.453-1.748-1.084-2.252-.724-.578-1.788-.876-3.164-.888h-.036c-1.048.009-1.958.259-2.702.744l-1.068-1.722c1.05-.685 2.313-1.04 3.757-1.055h.047c1.814.015 3.258.463 4.29 1.332 1.005.846 1.598 2.043 1.762 3.56.802.176 1.533.452 2.16.84 1.076.666 1.894 1.616 2.368 2.748.696 1.66.768 4.336-1.312 6.373-1.858 1.822-4.14 2.614-7.39 2.636zm.093-7.065c-.088 0-.177.002-.266.006-1.738.12-2.61.859-2.562 1.713.024.434.292.876.755 1.176.577.374 1.342.558 2.157.515 1.104-.06 1.933-.44 2.466-1.13.36-.467.6-1.075.716-1.815-.86-.2-1.758-.318-2.692-.35-.19-.007-.385-.016-.574-.016v.001z"/>
   </svg>
 );
+const XIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+    <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+  </svg>
+);
 const PlusIcon = () => (
   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round">
     <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
@@ -40,8 +45,9 @@ const LINKS = [
   { labelEn: "Post Your Ad", labelAr: "انشر إعلانك", descEn: "Free & paid plans available", descAr: "خطط مجانية ومدفوعة متاحة", href: "https://classifiedsuae.ae", Icon: PlusIcon, accent: "var(--primary)", primary: true },
   { labelEn: "Facebook", labelAr: "فيسبوك", descEn: "Like our page for daily deals", descAr: "تابع صفحتنا لأفضل العروض اليومية", href: "https://facebook.com/classifiedsuaeofficial", Icon: FacebookIcon, accent: "#1877F2", primary: false },
   { labelEn: "Instagram", labelAr: "إنستغرام", descEn: "Follow us on Instagram", descAr: "تابعنا على إنستغرام", href: "https://instagram.com/classifiedsuaeofficial", Icon: InstagramIcon, accent: "#E1306C", primary: false },
-  { labelEn: "WhatsApp Channel", labelAr: "قناة واتساب", descEn: "Get notified about new ads", descAr: "احصل على إشعارات بالإعلانات الجديدة", href: "https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34", Icon: WhatsAppIcon, accent: "#25D366", primary: false },
+  { labelEn: "X (Twitter)", labelAr: "X (تويتر)", descEn: "@clasifiedsuae", descAr: "@clasifiedsuae", href: "https://x.com/clasifiedsuae", Icon: XIcon, accent: "var(--text)", primary: false },
   { labelEn: "Telegram Channel", labelAr: "قناة تيليغرام", descEn: "Browse ads on Telegram", descAr: "تصفح الإعلانات على تيليغرام", href: "https://t.me/classifiedsuaeofficial", Icon: TelegramIcon, accent: "#229ED9", primary: false },
+  { labelEn: "WhatsApp Channel", labelAr: "قناة واتساب", descEn: "Get notified about new ads", descAr: "احصل على إشعارات بالإعلانات الجديدة", href: "https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34", Icon: WhatsAppIcon, accent: "#25D366", primary: false },
   { labelEn: "Threads", labelAr: "ثريدز", descEn: "@classifiedsuaeofficial", descAr: "@classifiedsuaeofficial", href: "https://www.threads.com/@classifiedsuaeofficial", Icon: ThreadsIcon, accent: "var(--text)", primary: false },
 ];
 
@@ -88,26 +94,22 @@ export default function GoPage() {
               </div>
               <div style={{ display: "flex", borderTop: "1px solid rgba(255,255,255,0.15)" }}>
                 {/* Website */}
-                <a href={`/${isAr ? "ar" : "en"}/new`} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", padding: "0.625rem 0", color: "#fff", textDecoration: "none", fontSize: "0.75rem", fontWeight: 600, borderRight: "1px solid rgba(255,255,255,0.15)", transition: "background 0.15s" }}
+                <a href={`/${isAr ? "ar" : "en"}/new`} style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", padding: "0.75rem 0", color: "#fff", textDecoration: "none", fontSize: "0.8125rem", fontWeight: 700, borderRight: "1px solid rgba(255,255,255,0.15)", transition: "background 0.15s" }}
                   onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)"; }}
                   onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; }}
                 >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src="/Classifieds_uae_jpg.jpeg" alt="Website" style={{ width: 18, height: 18, borderRadius: 4 }} />
-                  {isAr ? "الموقع" : "Website"}
+                  🌐 {isAr ? "الموقع" : "Website"}
                 </a>
-                {/* Telegram */}
-                <a href="https://t.me/classifiedsuae_bot" target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", padding: "0.625rem 0", color: "#fff", textDecoration: "none", fontSize: "0.75rem", fontWeight: 600, borderRight: "1px solid rgba(255,255,255,0.15)", transition: "background 0.15s" }}
+                {/* Telegram Bot */}
+                <a href="https://t.me/classifiedsuae_bot" target="_blank" rel="noopener noreferrer" style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", padding: "0.75rem 0", color: "#fff", textDecoration: "none", fontSize: "0.8125rem", fontWeight: 700, transition: "background 0.15s" }}
                   onMouseEnter={e => { e.currentTarget.style.backgroundColor = "rgba(255,255,255,0.1)"; }}
                   onMouseLeave={e => { e.currentTarget.style.backgroundColor = "transparent"; }}
                 >
                   <TelegramIcon />
-                  {isAr ? "تيليغرام" : "Telegram"}
+                  🤖 {isAr ? "بوت تيليغرام" : "Telegram Bot"}
                 </a>
-                {/* WhatsApp — dimmed + Soon */}
-                <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", gap: "0.4rem", padding: "0.625rem 0", color: "rgba(255,255,255,0.35)", fontSize: "0.75rem", fontWeight: 600, cursor: "not-allowed" }}>
-                  <WhatsAppIcon />
-                  <span style={{ fontSize: "0.6rem", fontWeight: 700, backgroundColor: "rgba(255,255,255,0.15)", padding: "0.1rem 0.35rem", borderRadius: 999, textTransform: "uppercase" as const, letterSpacing: "0.04em" }}>{isAr ? "قريبا" : "Soon"}</span>
-                </div>
               </div>
             </div>
 

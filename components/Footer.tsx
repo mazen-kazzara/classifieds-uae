@@ -2,24 +2,21 @@
 import Link from "next/link";
 import { useLocale } from "@/lib/useTranslations";
 import { getTranslations } from "@/lib/getTranslations";
+import { useEffect, useState } from "react";
+
+interface FooterCat { labelEn: string; labelAr: string; slug: string; }
 
 export default function Footer() {
   const locale = useLocale();
   const t = getTranslations(locale, "footer");
   const isAr = locale === "ar";
 
-  const categories = [
-    { labelEn: "Vehicles",          labelAr: "مركبات",          slug: "vehicles" },
-    { labelEn: "Real Estate",       labelAr: "عقارات",          slug: "real-estate" },
-    { labelEn: "Electronics",       labelAr: "إلكترونيات",      slug: "electronics" },
-    { labelEn: "Jobs",              labelAr: "وظائف",           slug: "jobs" },
-    { labelEn: "Services",          labelAr: "خدمات",           slug: "services" },
-    { labelEn: "Salons & Beauty",   labelAr: "صالونات وتجميل",  slug: "salons" },
-    { labelEn: "Clinics",           labelAr: "عيادات",          slug: "clinics" },
-    { labelEn: "Furniture",         labelAr: "أثاث",            slug: "furniture" },
-    { labelEn: "Education",         labelAr: "تعليم وتدريب",    slug: "education" },
-    { labelEn: "Other",             labelAr: "أخرى",            slug: "other" },
-  ];
+  const [categories, setCategories] = useState<FooterCat[]>([]);
+  useEffect(() => {
+    fetch("/api/public/categories").then(r => r.json()).then(d => {
+      if (d.ok) setCategories(d.categories.map((c: any) => ({ labelEn: c.name, labelAr: c.nameAr, slug: c.slug })));
+    });
+  }, []);
 
   const sectionTitle: React.CSSProperties = {
     color: "var(--text)", fontSize: "0.8125rem", fontWeight: 700, marginBottom: "0.75rem", letterSpacing: "0.01em",
@@ -39,7 +36,7 @@ export default function Footer() {
           <div>
             <Link href={`/${locale}`} style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", textDecoration: "none", marginBottom: "0.625rem" }}>
               <img src="/Classifieds_uae_jpg.jpeg" alt="Classifieds UAE" style={{ width: 28, height: 28, borderRadius: 6 }} />
-              <span style={{ color: "var(--text)", fontFamily: "'Inter', sans-serif", fontWeight: 800, fontSize: "0.875rem" }}>
+              <span style={{ color: "var(--text)", fontFamily: "var(--font-inter), sans-serif", fontWeight: 800, fontSize: "0.875rem" }}>
                 Classifieds <span style={{ color: "#EF3B24" }}>U</span><span style={{ color: "#00B857" }}>A</span><span style={{ color: "var(--text)" }}>E</span>
               </span>
             </Link>
@@ -95,6 +92,7 @@ export default function Footer() {
             <h4 style={sectionTitle}>{t("legal")}</h4>
             <ul style={{ listStyle: "none", padding: 0, margin: 0, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               <li><Link href={`/${locale}/about`} style={linkStyle}>{isAr ? "من نحن" : "About Us"}</Link></li>
+              <li><Link href={`/${locale}/faq`} style={linkStyle}>{isAr ? "الأسئلة الشائعة" : "FAQ"}</Link></li>
               <li><Link href={`/${locale}/go`} style={linkStyle}>{isAr ? "تواصل معنا" : "Contact Us"}</Link></li>
               <li><Link href={`/${locale}/terms`} style={linkStyle}>{t("terms")}</Link></li>
               <li><Link href={`/${locale}/privacy`} style={linkStyle}>{t("privacy")}</Link></li>

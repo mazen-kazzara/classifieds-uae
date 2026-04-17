@@ -11,6 +11,7 @@ const CATEGORY_IMAGES: Record<string, string> = {
   clinics: "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?w=800&q=80",
   furniture: "https://images.unsplash.com/photo-1555041469-a586c61ea9bc?w=800&q=80",
   education: "https://images.unsplash.com/photo-1503676260728-1c00da094a0b?w=800&q=80",
+  "clothes-fashion": "https://images.unsplash.com/photo-1441984904996-e0b6ba687e04?w=800&q=80",
   other: "https://images.unsplash.com/photo-1586769852044-692d6e3703f0?w=800&q=80",
 };
 

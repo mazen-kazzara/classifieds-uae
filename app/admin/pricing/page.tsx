@@ -12,19 +12,26 @@ export default function PricingPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
-  const adminKey = process.env.NEXT_PUBLIC_ADMIN_KEY || "";
 
   useEffect(() => {
-    fetch("/api/admin/pricing", { headers: { "x-admin-key": adminKey } })
+    fetch("/api/admin/pricing")
       .then(r => r.json())
       .then(d => { if (d.ok) { setTextPrice(d.pricing.textPrice); setImagePrice(d.pricing.imagePrice); setAdDurationDays(d.pricing.adDurationDays); } setLoading(false); });
-  }, [adminKey]);
+  }, []);
 
   async function handleSave() {
+    const otp = window.prompt(t("Enter your 2FA code to confirm:", "أدخل رمز المصادقة الثنائية للتأكيد:"));
+    if (!otp || !/^\d{6}$/.test(otp)) { setMsg(t("Invalid 2FA code", "رمز 2FA غير صالح")); return; }
     setSaving(true); setMsg("");
-    const d = await (await fetch("/api/admin/pricing", { method: "POST", headers: { "Content-Type": "application/json", "x-admin-key": adminKey }, body: JSON.stringify({ textPrice, imagePrice, adDurationDays }) })).json();
+    const d = await (await fetch("/api/admin/pricing", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ textPrice, imagePrice, adDurationDays, otp }) })).json();
     setSaving(false);
-    setMsg(d.ok ? t("Saved successfully", "تم الحفظ بنجاح") : t("Error saving", "خطأ في الحفظ"));
+    if (d.ok) { setMsg(t("Saved successfully", "تم الحفظ بنجاح")); return; }
+    const errMap: Record<string, string> = {
+      "2FA_REQUIRED": t("Invalid 2FA code", "رمز 2FA غير صالح"),
+      "2FA_NOT_ENABLED": t("Enable 2FA first (Admin → 2FA Security)", "فعّل المصادقة الثنائية أولاً"),
+      FORBIDDEN: t("Access denied", "الوصول مرفوض"),
+    };
+    setMsg(errMap[d.error] || t("Error: " + (d.error || "Unknown"), "خطأ: " + (d.error || "غير معروف")));
   }
 
   if (loading) return <p style={{ color: "var(--text-muted)", padding: "2rem" }}>{t("Loading...", "جارٍ التحميل...")}</p>;
@@ -39,7 +46,7 @@ export default function PricingPage() {
             <input style={inputStyle} type="number" min="0" value={textPrice} onChange={e => setTextPrice(Number(e.target.value))} />
           </div>
           <div>
-            <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: "0.25rem", display: "block" }}>{t("Image Price (AED per image)", "سعر الصورة (د.إ لكل صورة)")}</label>
+            <label style={{ fontSize: "0.75rem", fontWeight: 600, color: "var(--text-muted)", marginBottom: "0.25rem", display: "block" }}>{t("Image Price (legacy — flat pricing per plan)", "سعر الصورة (قديم — التسعير ثابت لكل خطة)")}</label>
             <input style={inputStyle} type="number" min="0" value={imagePrice} onChange={e => setImagePrice(Number(e.target.value))} />
           </div>
           <div>

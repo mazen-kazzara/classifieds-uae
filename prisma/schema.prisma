@@ -23,6 +23,13 @@ model User {
   phoneVerified Boolean  @default(false)
   emailVerified Boolean  @default(false)
 
+  // 2FA (TOTP) — for admin accounts
+  twoFactorSecret  String?
+  twoFactorEnabled Boolean @default(false)
+
+  // Session timeout tracking
+  lastActivityAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -39,29 +46,38 @@ model Category {
   nameAr      String
   slug        String  @unique
   icon        String?
+  imageUrl    String?
   description String?
   isActive    Boolean @default(true)
   sortOrder   Int     @default(0)
+
+  parentId String?
+  parent   Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children Category[] @relation("CategoryHierarchy")
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   submissions AdSubmission[]
+
+  @@index([parentId])
 }
 
 model Package {
-  id               String  @id @default(cuid())
-  name             String  @unique
+  id               String    @id @default(cuid())
+  name             String    @unique
   nameAr           String
   description      String?
   price            Int
-  durationDays     Int     @default(7)
-  maxImages        Int     @default(2)
-  isFeatured       Boolean @default(false)
-  isPinned         Boolean @default(false)
-  includesTelegram Boolean @default(false)
-  isActive         Boolean @default(true)
-  sortOrder        Int     @default(0)
+  durationDays     Int       @default(7)
+  maxChars         Int       @default(300)
+  maxImages        Int       @default(2)
+  isFeatured       Boolean   @default(false)
+  isPinned         Boolean   @default(false)
+  includesTelegram Boolean   @default(false)
+  isActive         Boolean   @default(true)
+  sortOrder        Int       @default(0)
+  promoEndDate     DateTime?
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -159,6 +175,14 @@ model Ad {
   adPrice      Int?
   isNegotiable Boolean @default(false)
 
+  telegramMessageId String?
+  facebookPostId    String?
+  instagramPostId   String?
+  twitterPostId     String?
+
+  // Soft-delete: admin can restore within 7 days, cron purges after
+  deletedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -251,6 +275,19 @@ model OtpRequest {
   @@index([phone])
 }
 
+model PromoLog {
+  id           String   @id @default(cuid())
+  platform     String
+  contentIndex Int
+  postId       String?
+  postUrl      String?
+  status       String   @default("SUCCESS")
+  errorMessage String?
+  publishedAt  DateTime @default(now())
+
+  @@index([platform, publishedAt(sort: Desc)])
+}
+
 model AuditLog {
   id String @id @default(cuid())
 
@@ -299,5 +336,6 @@ enum PaymentStatus {
 enum UserRole {
   USER
   ADMIN
+  CONTENT_ADMIN
   SUPERVISOR
 }

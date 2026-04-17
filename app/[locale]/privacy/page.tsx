@@ -57,15 +57,19 @@ export default async function PrivacyPage({ params }: Props) {
             <h3 style={h3Style}>{isAr ? "2.1 البيانات التي تقدمها مباشرةً" : "2.1 Data You Provide Directly"}</h3>
             <ul style={ulStyle}>
               {isAr ? <>
-                <li>رقم الهاتف الإماراتي — يُستخدم لتحديد حسابك وتمكين التواصل</li>
-                <li>محتوى الإعلان — نص (حتى 100 حرف) وصور (حتى صورتين لكل إعلان)</li>
-                <li>فئة الإعلان ومعلومات التسعير</li>
+                <li>رقم الهاتف الإماراتي أو البريد الإلكتروني — لتحديد حسابك وتمكين التواصل</li>
+                <li>الاسم (اختياري) لعرضه إلى جانب إعلاناتك</li>
+                <li>محتوى الإعلان — النص والصور (الحدود تعتمد على الخطة المختارة: من 150 حرفاً وصورة واحدة في الخطة المجانية إلى 1200 حرفاً و6 صور في خطة بريميوم)</li>
+                <li>الفئة ومعلومات التسعير الخاصة بالإعلان</li>
                 <li>رقم واتساب اختياري إذا كان مختلفاً عن رقم التواصل</li>
+                <li>معرّف تيليغرام الاختياري إذا اخترت قناة تيليغرام كوسيلة تواصل</li>
               </> : <>
-                <li>UAE phone number — used to identify your account and enable contact</li>
-                <li>Ad content — text (up to 100 characters) and images (up to 2 per ad)</li>
+                <li>UAE phone number or email — used to identify your account and enable contact</li>
+                <li>Optional name to display alongside your ads</li>
+                <li>Ad content — text and images (limits depend on your selected plan: from 150 chars &amp; 1 image on Free up to 1200 chars &amp; 6 images on Premium)</li>
                 <li>Ad category and pricing information</li>
                 <li>Optional WhatsApp number if different from your contact number</li>
+                <li>Optional Telegram username if you choose Telegram as a contact method</li>
               </>}
             </ul>
 

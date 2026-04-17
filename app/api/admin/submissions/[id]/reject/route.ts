@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireAdmin } from "@/lib/admin-auth";
 
-export async function POST(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const auth = await requireAdmin(req, { minRole: "CONTENT_ADMIN" });
+  if (auth.error) return auth.error;
   try {
     const { id } = await params;
     const submission = await prisma.adSubmission.findUnique({ where: { id }, include: { ad: true } });

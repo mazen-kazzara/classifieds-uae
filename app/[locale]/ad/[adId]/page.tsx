@@ -7,29 +7,7 @@ import Footer from "@/components/Footer";
 import { getTranslations } from "@/lib/getTranslations";
 import type { Metadata } from "next";
 
-const CAT_AR: Record<string, string> = {
-  vehicles: "مركبات", "real-estate": "عقارات", electronics: "إلكترونيات",
-  jobs: "وظائف", services: "خدمات", salons: "صالونات وتجميل", "salons-beauty": "صالونات وتجميل", "salons-&-beauty": "صالونات وتجميل", "salons & beauty": "صالونات وتجميل",
-  clinics: "عيادات", furniture: "أثاث", education: "تعليم", other: "أخرى",
-};
-
-const CATEGORY_IMAGES: Record<string, string> = {
-  vehicles: "https://images.unsplash.com/photo-1583121274602-3e2820c69888?w=800&q=80",
-  "real-estate": "https://images.unsplash.com/photo-1564013799919-ab600027ffc6?w=800&q=80",
-  electronics: "https://images.unsplash.com/photo-1550009158-9ebf69173e03?w=800&q=80",
-  jobs: "https://images.unsplash.com/photo-1521737711867-e3b97375f902?w=800&q=80",
-  services: "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?w=800&q=80",
-  salons: "https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&q=80",
-  clinics: "https://images.unsplash.com/photo-1631815588090-d4bfec5b1ccb?w=800&q=80",
-  furniture: "https://images.unsplash.com/photo-1586023492125-27b2c045efd7?w=800&q=80",
-  education: "https://images.unsplash.com/photo-1524178232363-1fb2b075b655?w=800&q=80",
-  other: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=800&q=80",
-};
-
-function getCategoryImage(category: string): string {
-  const slug = category.toLowerCase().replace(/ /g, "-").replace(/&/g, "").replace(/--/g, "-");
-  return CATEGORY_IMAGES[slug] || CATEGORY_IMAGES["other"];
-}
+import { getCategories, getCatArMap, getCategoryImageMap, getCategoryImage } from "@/lib/categories";
 
 interface Props { params: Promise<{ adId: string; locale: string }> }
 
@@ -70,6 +48,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 export default async function AdPage({ params }: Props) {
   const { adId, locale } = await params;
   const t = getTranslations(locale, "ad");
+  const allCats = await getCategories();
+  const CAT_AR = getCatArMap(allCats);
+  const CATEGORY_IMAGES = getCategoryImageMap(allCats);
   const ad = await prisma.ad.findUnique({
     where: { id: decodeURIComponent(adId) },
     include: { media: { orderBy: { position: "asc" } } },
@@ -189,7 +170,7 @@ export default async function AdPage({ params }: Props) {
               }) : (
                 // eslint-disable-next-line @next/next/no-img-element
                 <div style={{ position: "relative" }}>
-                  <img src={getCategoryImage(ad.category)} alt={ad.category} style={{ width: "100%", height: 260, objectFit: "cover", borderRadius: "var(--radius-md)", border: "1.5px solid var(--border)", opacity: 0.5 }} />
+                  <img src={getCategoryImage(ad.category, CATEGORY_IMAGES)} alt={ad.category} style={{ width: "100%", height: 260, objectFit: "cover", borderRadius: "var(--radius-md)", border: "1.5px solid var(--border)", opacity: 0.5 }} />
                   <span style={{ position: "absolute", bottom: "0.5rem", insetInlineEnd: "0.5rem", fontSize: "0.7rem", fontWeight: 600, padding: "0.2rem 0.5rem", borderRadius: 999, backgroundColor: "rgba(0,0,0,0.55)", color: "rgba(255,255,255,0.75)" }}>{locale === "ar" ? "صورة توضيحية — لا توجد صورة مرفوعة" : "Illustrative — no image uploaded"}</span>
                 </div>
               )}

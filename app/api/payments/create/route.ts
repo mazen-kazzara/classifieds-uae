@@ -34,12 +34,13 @@ export async function POST(req: NextRequest) {
     const amount = submission.priceTotal || 0;
 
     // =========================
-    // ENFORCE: Free plan cannot have images
-    if (!hasPaidPackage) {
+    // ENFORCE: Free plan cannot have images (except admin-unlimited)
+    const isAdminPkg = submission?.packageId === "admin-unlimited";
+    if (!hasPaidPackage && !isAdminPkg) {
       const mediaCount = await prisma.submissionMedia.count({ where: { submissionId } });
       if (mediaCount > 0) {
         return NextResponse.json(
-          { error: "FREE_PLAN_NO_IMAGES", message: "Free plan does not support images. Please remove images or upgrade to Normal/Featured." },
+          { error: "FREE_PLAN_NO_IMAGES", message: "Free plan does not support images. Please remove images or upgrade." },
           { status: 400 }
         );
       }
@@ -143,25 +144,54 @@ export async function POST(req: NextRequest) {
           if (hasTg && tgUser) buttons.push({ text: "✈️ Telegram", url: `https://t.me/${tgUser}` });
           buttons.push({ text: "🔗 View Ad", url: adUrl });
           const replyMarkup = { inline_keyboard: [buttons] };
-          const firstMedia = (submission as any).submissionMedia?.[0];
-          const photoUrl = firstMedia
-            ? (firstMedia.tempKey.startsWith("/") ? `${process.env.APP_URL || "https://classifiedsuae.ae"}${firstMedia.tempKey}` : `${process.env.APP_URL || "https://classifiedsuae.ae"}/uploads/${firstMedia.tempKey}`)
-            : null;
-          if (photoUrl) {
+          const TG_APP = process.env.APP_URL || "https://classifiedsuae.ae";
+          const allMedia = (submission.submissionMedia || []).map((m: any) => `${TG_APP}/uploads/${m.tempKey.replace(/^\/?(uploads\/)?/, "")}`);
+          let tgSent = false;
+
+          if (allMedia.length > 1) {
+            // Multiple images → sendMediaGroup
+            const mediaGroup = allMedia.map((url: string, i: number) => ({
+              type: "photo",
+              media: url,
+              ...(i === 0 ? { caption: caption.slice(0, 1024) } : {}),
+            }));
+            const tgRes = await fetch(`https://api.telegram.org/bot${BOT}/sendMediaGroup`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ chat_id: CHAN, media: mediaGroup }),
+            }).catch(() => null);
+            const tgJson = await tgRes?.json().catch(() => null);
+            if (tgJson?.ok && Array.isArray(tgJson.result)) {
+              tgSent = true;
+              const allMsgIds = tgJson.result.map((r: any) => r.message_id).filter(Boolean);
+              // Send buttons separately
+              const btnRes = await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ chat_id: CHAN, text: `🔗 ${adUrl}`, reply_markup: replyMarkup }),
+              }).catch(() => null);
+              const btnJson = await btnRes?.json().catch(() => null);
+              if (btnJson?.result?.message_id) allMsgIds.push(btnJson.result.message_id);
+              if (allMsgIds.length > 0) {
+                await prisma.ad.update({ where: { id: ad.id }, data: { telegramMessageId: allMsgIds.join(",") } });
+              }
+            }
+          } else if (allMedia.length === 1) {
             const tgRes = await fetch(`https://api.telegram.org/bot${BOT}/sendPhoto`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chat_id: CHAN, photo: photoUrl, caption: caption.slice(0, 1024), reply_markup: replyMarkup }),
-            }).catch((e: unknown) => { console.error("TG sendPhoto error:", e); return null; });
+              body: JSON.stringify({ chat_id: CHAN, photo: allMedia[0], caption: caption.slice(0, 1024), reply_markup: replyMarkup }),
+            }).catch(() => null);
             const tgJson = await tgRes?.json().catch(() => null);
-            if (!tgJson?.ok) {
-              await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ chat_id: CHAN, text: caption.slice(0, 4096), reply_markup: replyMarkup }),
-              }).catch((e: unknown) => { console.error("TG sendMessage error:", e); });
+            if (tgJson?.ok) {
+              tgSent = true;
+              if (tgJson.result?.message_id) {
+                await prisma.ad.update({ where: { id: ad.id }, data: { telegramMessageId: String(tgJson.result.message_id) } });
+              }
             }
-          } else {
+          }
+
+          if (!tgSent) {
             await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -171,14 +201,14 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // Social (Facebook + Instagram) publish — only if user selected them
-      if (pubTarget.includes("facebook") || pubTarget.includes("instagram")) {
+      // Social (Facebook + Instagram + X) publish — only if user selected them
+      if (pubTarget.includes("facebook") || pubTarget.includes("instagram") || pubTarget.includes("x")) {
         const APP_URL = process.env.APP_URL || "https://classifiedsuae.ae";
         const adUrl2 = `${APP_URL}/ad/${ad.id}`;
-        const firstMedia2 = submission.submissionMedia?.[0];
-        const imageUrl = firstMedia2
-          ? `${APP_URL}${firstMedia2.tempKey.startsWith("/") ? firstMedia2.tempKey : `/${firstMedia2.tempKey}`}`
-          : null;
+        const allImageUrls = (submission.submissionMedia || []).map((m: any) =>
+          `${APP_URL}/uploads/${m.tempKey.replace(/^\/?(uploads\/)?/, "")}`
+        );
+        const imageUrl = allImageUrls[0] ?? null;
         const methodStr2 = (submission as any).contactMethod || "";
         const methods2 = methodStr2 ? methodStr2.split(",").map((m: string) => m.trim()) : [];
         const phone2 = ((submission as any).contactPhone || submission.phone || "").replace(/\D/g, "");
@@ -187,18 +217,30 @@ export async function POST(req: NextRequest) {
         if (methods2.includes("call") && phone2) contactLines2.push(`📞 +${phone2}`);
         if (methods2.includes("whatsapp") && waNum2) contactLines2.push(`💬 wa.me/${waNum2}`);
         if (methods2.includes("telegram")) contactLines2.push(`✈️ Telegram`);
-        publishToSocial({
-          title: ad.title || "",
-          description: ad.description || "",
-          category: ad.category,
-          adUrl: adUrl2,
-          imageUrl,
-          adPrice: (submission as any).adPrice ?? null,
-          isNegotiable: (submission as any).isNegotiable ?? false,
-          contactLines: contactLines2,
-          publishFacebook: pubTarget.includes("facebook"),
-          publishInstagram: pubTarget.includes("instagram"),
-        }).catch(e => console.error("SOCIAL PUBLISH ERROR (create):", e));
+        try {
+          const socialResult = await publishToSocial({
+            title: ad.title || "",
+            description: ad.description || "",
+            category: ad.category,
+            adUrl: adUrl2,
+            imageUrl,
+            allImageUrls,
+            adPrice: (submission as any).adPrice ?? null,
+            isNegotiable: (submission as any).isNegotiable ?? false,
+            contactLines: contactLines2,
+            publishFacebook: pubTarget.includes("facebook"),
+            publishInstagram: pubTarget.includes("instagram"),
+            publishX: pubTarget.includes("x"),
+          });
+          const socialIds: Record<string, string> = {};
+          if (socialResult.facebookPostId) socialIds.facebookPostId = socialResult.facebookPostId;
+          if (socialResult.instagramPostId) socialIds.instagramPostId = socialResult.instagramPostId;
+          if (socialResult.xPostId) socialIds.twitterPostId = socialResult.xPostId;
+          if (Object.keys(socialIds).length > 0) {
+            await prisma.ad.update({ where: { id: ad.id }, data: socialIds });
+            console.log("SOCIAL IDs saved for ad=", ad.id, socialIds);
+          }
+        } catch (e) { console.error("SOCIAL PUBLISH ERROR (create):", e); }
       }
 
       return NextResponse.json({ free: true, adId: ad.id });

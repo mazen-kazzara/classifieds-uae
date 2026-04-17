@@ -2,8 +2,23 @@ import { notFound } from "next/navigation";
 import "../globals.css";
 import { routing } from "@/i18n/routing";
 import Providers from "../providers";
-import FloatingButtons from "@/components/FloatingButtons";
+import LazyFloatingButtons from "@/components/LazyFloatingButtons";
 import type { Metadata } from "next";
+import { Inter, Cairo } from "next/font/google";
+
+const inter = Inter({
+  subsets: ["latin"],
+  weight: ["400", "600", "700", "800"],
+  display: "swap",
+  variable: "--font-inter",
+});
+
+const cairo = Cairo({
+  subsets: ["arabic", "latin"],
+  weight: ["400", "600", "700", "800"],
+  display: "swap",
+  variable: "--font-cairo",
+});
 
 export const metadata: Metadata = {
   title: { default: "Classifieds UAE", template: "%s | Classifieds UAE" },
@@ -58,20 +73,18 @@ export default async function LocaleLayout({
   const isRTL = locale === "ar";
 
   return (
-    <html lang={locale} dir={isRTL ? "rtl" : "ltr"} suppressHydrationWarning>
+    <html lang={locale} dir={isRTL ? "rtl" : "ltr"} suppressHydrationWarning className={`${inter.variable} ${cairo.variable}`}>
       <head>
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+        <link rel="dns-prefetch" href="https://images.unsplash.com" />
       </head>
       <body
         className="antialiased"
         suppressHydrationWarning
-        style={{ fontFamily: isRTL ? "'Cairo', sans-serif" : "'Inter', sans-serif" }}
+        style={{ fontFamily: isRTL ? "var(--font-cairo), sans-serif" : "var(--font-inter), sans-serif" }}
       >
         <Providers>
           {children}
-          <FloatingButtons />
+          <LazyFloatingButtons />
         </Providers>
       </body>
     </html>

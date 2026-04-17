@@ -18,22 +18,52 @@ export default function UsersPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [msg, setMsg] = useState("");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
 
   async function load() {
-    const res = await fetch("/api/admin/users");
+    setLoading(true);
+    const url = debouncedSearch ? `/api/admin/users?search=${encodeURIComponent(debouncedSearch)}` : "/api/admin/users";
+    const res = await fetch(url);
     const d = await res.json();
     if (d.ok) setUsers(d.users);
     setLoading(false);
   }
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(); }, [debouncedSearch]);
 
   async function doAction(userId: string, action: string, role?: string) {
     if (action === "delete" && !confirm(t("Delete this user and all their submissions?", "حذف هذا المستخدم وجميع طلباته؟"))) return;
-    await fetch("/api/admin/users", {
+    // All user mgmt requires 2FA step-up
+    const otp = window.prompt(t("Enter your 2FA code to confirm:", "أدخل رمز المصادقة الثنائية للتأكيد:"));
+    if (!otp || !/^\d{6}$/.test(otp)) {
+      setMsg(t("Invalid 2FA code", "رمز 2FA غير صالح"));
+      return;
+    }
+    const res = await fetch("/api/admin/users", {
       method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, action, role }),
+      body: JSON.stringify({ userId, action, role, otp }),
     });
+    const data = await res.json();
+    if (!data.ok) {
+      const errMap: Record<string, string> = {
+        CANNOT_SELF_MODIFY: t("You cannot modify your own account", "لا يمكنك تعديل حسابك الخاص"),
+        CANNOT_SELF_DEMOTE: t("You cannot demote yourself", "لا يمكنك تخفيض صلاحيتك الخاصة"),
+        INVALID_ROLE: t("Invalid role", "صلاحية غير صالحة"),
+        USER_NOT_FOUND: t("User not found", "المستخدم غير موجود"),
+        "2FA_REQUIRED": t("Invalid 2FA code", "رمز 2FA غير صالح"),
+        "2FA_NOT_ENABLED": t("Enable 2FA first (Admin → 2FA Security)", "فعّل المصادقة الثنائية أولاً"),
+        FORBIDDEN: t("Access denied", "الوصول مرفوض"),
+        SESSION_EXPIRED: t("Session expired. Please log in again.", "انتهت الجلسة. يرجى تسجيل الدخول مجدداً."),
+      };
+      setMsg(errMap[data.error] || t("Error: ", "خطأ: ") + (data.error || "Unknown"));
+      return;
+    }
     setMsg(action === "delete" ? t("User deleted","تم حذف المستخدم") : action === "suspend" ? t("User suspended","تم إيقاف المستخدم") : action === "activate" ? t("User activated","تم تفعيل المستخدم") : t("Role updated","تم تحديث الصلاحية"));
     load();
   }
@@ -42,7 +72,19 @@ export default function UsersPage() {
 
   return (
     <div>
-      <h1 style={{ color: "var(--text)", fontWeight: 800, fontSize: "1.5rem", marginBottom: "1.25rem" }}>{t("Users", "المستخدمون")} ({users.length})</h1>
+      <h1 style={{ color: "var(--text)", fontWeight: 800, fontSize: "1.5rem", marginBottom: "1rem" }}>{t("Users", "المستخدمون")} ({users.length})</h1>
+
+      <input
+        type="text"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder={t("Search by name, email, phone, ID…", "ابحث بالاسم، البريد، الهاتف، المعرّف…")}
+        style={{
+          width: "100%", padding: "0.625rem 1rem", borderRadius: "var(--radius-md)",
+          border: "1.5px solid var(--border)", backgroundColor: "var(--surface)",
+          color: "var(--text)", fontSize: "0.875rem", outline: "none", marginBottom: "1rem", boxSizing: "border-box",
+        }}
+      />
 
       {msg && <div style={{ backgroundColor: "color-mix(in srgb, var(--primary) 10%, var(--surface))", border: "1.5px solid var(--primary)", borderRadius: "var(--radius-md)", padding: "0.625rem 1rem", marginBottom: "1rem", color: "var(--primary)", fontSize: "0.8125rem", cursor: "pointer" }} onClick={() => setMsg("")}>{msg}</div>}
 
@@ -76,8 +118,9 @@ export default function UsersPage() {
                       <select value={user.role} onChange={e => doAction(user.id, "", e.target.value)}
                         style={{ padding: "0.25rem 0.5rem", borderRadius: "var(--radius-md)", border: "1.5px solid var(--border)", backgroundColor: "var(--surface)", color: "var(--text)", fontSize: "0.75rem", cursor: "pointer", outline: "none" }}>
                         <option value="USER">USER</option>
-                        <option value="ADMIN">ADMIN</option>
                         <option value="SUPERVISOR">SUPERVISOR</option>
+                        <option value="CONTENT_ADMIN">CONTENT_ADMIN</option>
+                        <option value="ADMIN">ADMIN</option>
                       </select>
                     </td>
                     <td style={tdStyle}>

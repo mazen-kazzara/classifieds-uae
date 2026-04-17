@@ -8,15 +8,17 @@ import path from "path";
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
-    const s = await prisma.adSubmission.findUnique({ where: { id } });
+    const s = await prisma.adSubmission.findUnique({ where: { id }, include: { package: true } });
     if (!s) return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 });
     if (s.status !== "DRAFT") return NextResponse.json({ ok: false, error: "CANNOT_EDIT" }, { status: 400 });
 
+    // Enforce image limit from selected package
+    const maxImages = s.package?.maxImages ?? 6;
     const form = await req.formData();
     const file = form.get("file");
     const position = Number(String(form.get("position") ?? "").trim());
 
-    if (![1,2].includes(position)) return NextResponse.json({ ok: false, error: "INVALID_POSITION" }, { status: 400 });
+    if (position < 1 || position > maxImages) return NextResponse.json({ ok: false, error: "INVALID_POSITION", message: `Your plan allows up to ${maxImages} images.`, maxImages }, { status: 400 });
     if (!file || !(file instanceof File)) return NextResponse.json({ ok: false, error: "FILE_REQUIRED" }, { status: 400 });
     if (!["image/jpeg","image/png","image/webp"].includes(file.type)) return NextResponse.json({ ok: false, error: "INVALID_IMAGE_TYPE" }, { status: 400 });
     if (file.size > 5 * 1024 * 1024) return NextResponse.json({ ok: false, error: "IMAGE_TOO_LARGE" }, { status: 400 });
@@ -37,12 +39,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     });
 
     const media = await prisma.submissionMedia.findMany({ where: { submissionId: id } });
-    const config = await prisma.pricingConfig.findFirst({ orderBy: { createdAt: "desc" } });
-    const priceImages = media.length * 2.5;
-    const priceTotal = (s.priceText || 0) + priceImages;
-    await prisma.adSubmission.update({ where: { id }, data: { imagesCount: media.length, priceImages, priceTotal } });
+    // Price is now flat per package — no per-image surcharge
+    const packagePrice = s.package?.price ?? 0;
+    await prisma.adSubmission.update({ where: { id }, data: { imagesCount: media.length, priceImages: 0, priceTotal: packagePrice } });
 
-    return NextResponse.json({ ok: true, url: `/uploads/${relativePath}`, imagesCount: media.length, priceImages, priceTotal });
+    return NextResponse.json({ ok: true, url: `/uploads/${relativePath}`, imagesCount: media.length, priceTotal: packagePrice });
   } catch (err: unknown) {
     return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: err instanceof Error ? err.message : "" }, { status: 500 });
   }

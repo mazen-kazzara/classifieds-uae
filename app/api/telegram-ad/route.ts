@@ -64,8 +64,6 @@ export async function POST(req: Request) {
     const text     = String(data?.text     ?? "").trim();
     const title    = String(data?.title    ?? "").trim();
     const name     = String(data?.name     ?? "").trim();
-    const price    = Number(data?.price    ?? 0);
-    const isFree   = price === 0;
     const rawCategory = String(data?.category ?? "").trim();
     const rawLanguage = String(data?.language ?? "").trim().toLowerCase();
 
@@ -84,47 +82,24 @@ export async function POST(req: Request) {
     if (!text) {
       return NextResponse.json({ error: "TEXT_REQUIRED" }, { status: 400 });
     }
-    if (!Number.isFinite(price) || price < 0) {
-      return NextResponse.json({ error: "INVALID_PRICE" }, { status: 400 });
+    // ── Category normalisation (dynamic from DB) ─────────────────────────────
+    const dbCategories = await prisma.category.findMany({
+      where: { isActive: true },
+      select: { name: true, nameAr: true, slug: true },
+    });
+    const categoryMap: Record<string, string> = {};
+    for (const cat of dbCategories) {
+      categoryMap[cat.slug] = cat.name;
+      categoryMap[cat.name.toLowerCase()] = cat.name;
+      categoryMap[cat.nameAr] = cat.name;
+      // Add individual words as shortcuts
+      for (const word of cat.name.toLowerCase().split(/[\s&]+/).filter(w => w.length > 3)) {
+        if (!categoryMap[word]) categoryMap[word] = cat.name;
+      }
+      for (const word of cat.nameAr.split(/\s+/).filter(w => w.length > 2)) {
+        if (!categoryMap[word]) categoryMap[word] = cat.name;
+      }
     }
-
-    // ── Category normalisation ─────────────────────────────────────────────────
-    const categoryMap: Record<string, string> = {
-      // English keys
-      "vehicles":           "Vehicles",
-      "vehicle":            "Vehicles",
-      "electronics":        "Electronics",
-      "electronic":         "Electronics",
-      "real estate":        "Real Estate",
-      "realestate":         "Real Estate",
-      "property":           "Real Estate",
-      "properties":         "Real Estate",
-      "jobs":               "Jobs",
-      "job":                "Jobs",
-      "services":           "Services",
-      "service":            "Services",
-      "salons & beauty":    "Salons & Beauty",
-      "salons":             "Salons & Beauty",
-      "beauty":             "Salons & Beauty",
-      "clinics":            "Clinics",
-      "clinic":             "Clinics",
-      "furniture":          "Furniture",
-      "education & training": "Education & Training",
-      "education":          "Education & Training",
-      "training":           "Education & Training",
-      "other":              "Other",
-      // Arabic keys
-      "سيارات":             "Vehicles",
-      "عقارات":             "Real Estate",
-      "إلكترونيات":         "Electronics",
-      "وظائف":              "Jobs",
-      "خدمات":              "Services",
-      "صالونات وتجميل":     "Salons & Beauty",
-      "عيادات":             "Clinics",
-      "أثاث":               "Furniture",
-      "تعليم وتدريب":       "Education & Training",
-      "أخرى":               "Other",
-    };
 
     const normalizedCategory =
       (categoryMap[rawCategory] ??
@@ -133,6 +108,21 @@ export async function POST(req: Request) {
       "Other";
 
     const normalizedLanguage = rawLanguage === "ar" ? "ar" : "en";
+
+    // ── Resolve package and enforce limits ───────────────────────────────────
+    const packageId = data?.packageId ? String(data.packageId).trim() : null;
+    let pkg: { id: string; price: number; maxChars: number; maxImages: number; durationDays: number; isFeatured: boolean; isPinned: boolean } | null = null;
+    if (packageId) {
+      pkg = await prisma.package.findUnique({ where: { id: packageId }, select: { id: true, price: true, maxChars: true, maxImages: true, durationDays: true, isFeatured: true, isPinned: true } });
+    }
+    const maxChars = pkg?.maxChars ?? 150;
+    const maxImages = pkg?.maxImages ?? 1;
+    if (text.length > maxChars) {
+      return NextResponse.json({ error: "TEXT_TOO_LONG", message: `Max ${maxChars} chars for this plan.`, maxChars }, { status: 400 });
+    }
+    if (Array.isArray(data.images) && data.images.length > maxImages) {
+      return NextResponse.json({ error: "TOO_MANY_IMAGES", message: `Max ${maxImages} images for this plan.`, maxImages }, { status: 400 });
+    }
 
     console.log("IMAGES:", data.images);
 
@@ -145,15 +135,16 @@ export async function POST(req: Request) {
     const hasWebsite   = platformList.includes("website")  || rawPlatform === "both";
     const hasFacebook  = platformList.includes("facebook");
     const hasInstagram = platformList.includes("instagram");
+    const hasX         = platformList.includes("x");
     const targetParts: string[] = [];
     if (hasWebsite)   targetParts.push("website");
     if (hasTelegram)  targetParts.push("telegram");
     if (hasFacebook)  targetParts.push("facebook");
     if (hasInstagram) targetParts.push("instagram");
+    if (hasX)         targetParts.push("x");
     const publishTarget = targetParts.length > 0 ? targetParts.join("+") : "website";
 
     // ── Parse contact methods (comma-separated: "whatsapp,telegram,call") ──────
-    const packageId = data?.packageId ? String(data.packageId).trim() : null;
     const telegramUsername = data?.telegramUsername ? String(data.telegramUsername).trim().replace(/^@/, "") : null;
 
     const rawContactMethod = String(data?.contactMethod ?? "").trim();
@@ -167,7 +158,9 @@ export async function POST(req: Request) {
     // whatsappNumber must be set for the WhatsApp button to appear on the website
     const whatsappNumber = hasWhatsApp ? phone : null;
 
-    const roundedPrice = price;
+    // Use flat package price instead of dynamic bot-calculated price
+    const packagePrice = pkg?.price ?? 0;
+    const isFreePackage = packagePrice === 0;
 
     // ── Upsert user record ────────────────────────────────────────────────────
     if (name && phone) {
@@ -190,10 +183,10 @@ export async function POST(req: Request) {
         text,
         title:          title || null,
         language:       normalizedLanguage,
-        priceTotal:     roundedPrice,
+        priceTotal:     packagePrice,
         adPrice:        data.adPrice  != null ? Number(data.adPrice) : null,
         isNegotiable:   data.isNegotiable === true,
-        status:         isFree ? "PUBLISHED" : "WAITING_PAYMENT",
+        status:         isFreePackage ? "PUBLISHED" : "WAITING_PAYMENT",
         publishTarget,
         contactMethod,
         packageId: packageId || undefined,
@@ -232,8 +225,6 @@ export async function POST(req: Request) {
         data: {
           images:      savedImagePaths,
           imagesCount: savedImagePaths.length,
-          // Each image costs 2.5 AED
-          priceImages: savedImagePaths.length * 2.5,
         } as any,
       });
     }
@@ -241,14 +232,15 @@ export async function POST(req: Request) {
     console.log("SUBMISSION CREATED:", submission.id);
 
     // ── Free plan: create Ad record and publish instantly ────────────────────
-    if (isFree) {
+    if (isFreePackage) {
       const PUBLIC_URL =
         process.env.APP_URL ||
         process.env.NEXT_PUBLIC_APP_URL ||
         "https://classifiedsuae.com";
 
+      const durationDays = pkg?.durationDays ?? 30;
       const expiresAt = new Date();
-      expiresAt.setDate(expiresAt.getDate() + 3);
+      expiresAt.setDate(expiresAt.getDate() + durationDays);
 
       const ad = await prisma.ad.create({
         data: {
@@ -276,41 +268,63 @@ export async function POST(req: Request) {
       const adUrl = `${PUBLIC_URL}/ad/${ad.id}`;
 
       // Build contact lines and publish to social
-      let facebookUrl: string | null = null;
-      let instagramUrl: string | null = null;
-      if (hasFacebook || hasInstagram) {
+      console.log("SOCIAL TARGETS:", { hasFacebook, hasInstagram, hasX, publishTarget, rawPlatform });
+      if (hasFacebook || hasInstagram || hasX) {
         const socialContactLines: string[] = [];
         if (hasCall)      socialContactLines.push(`📞 +${phone}`);
         if (hasWhatsApp)  socialContactLines.push(`💬 wa.me/${phone}`);
         if (contactMethods.includes("telegram")) socialContactLines.push(`✈️ Telegram`);
 
-        try {
-          const socialResult = await publishToSocial({
-            title:        ad.title || "",
-            description:  ad.description,
-            category:     ad.category,
-            adUrl,
-            imageUrl:     savedImagePaths[0] ? `${PUBLIC_URL}${savedImagePaths[0]}` : null,
-            adPrice:      data.adPrice ? Number(data.adPrice) : null,
-            isNegotiable: data.isNegotiable === true,
-            contactLines: socialContactLines,
-            publishFacebook:  hasFacebook,
-            publishInstagram: hasInstagram,
-          });
-          facebookUrl = socialResult.facebookUrl || null;
-          instagramUrl = socialResult.instagramUrl || null;
-        } catch (e) { console.error("SOCIAL PUBLISH ERROR:", e); }
+        const allSocialImageUrls = savedImagePaths.map(p => `${PUBLIC_URL}/uploads/${p.replace(/^\/?(uploads\/)?/, "")}`);
+        // Fire-and-forget: IG carousel can take 30-120 seconds. Don't make the bot wait.
+        // We respond immediately; social IDs are saved to the ad record when the publish finishes.
+        const adIdForUpdate = ad.id;
+        publishToSocial({
+          title:        ad.title || "",
+          description:  ad.description,
+          category:     ad.category,
+          adUrl,
+          imageUrl:     allSocialImageUrls[0] ?? null,
+          allImageUrls: allSocialImageUrls,
+          adPrice:      data.adPrice ? Number(data.adPrice) : null,
+          isNegotiable: data.isNegotiable === true,
+          contactLines: socialContactLines,
+          publishFacebook:  hasFacebook,
+          publishInstagram: hasInstagram,
+          publishX: hasX,
+        }).then(async (socialResult) => {
+          const socialIds: Record<string, string> = {};
+          if (socialResult.facebookPostId) socialIds.facebookPostId = socialResult.facebookPostId;
+          if (socialResult.instagramPostId) socialIds.instagramPostId = socialResult.instagramPostId;
+          if (socialResult.xPostId) socialIds.twitterPostId = socialResult.xPostId;
+          if (Object.keys(socialIds).length > 0) {
+            await prisma.ad.update({ where: { id: adIdForUpdate }, data: socialIds });
+            console.log("TELEGRAM ROUTE: social IDs saved for ad=", adIdForUpdate, socialIds);
+          }
+        }).catch(e => console.error("TELEGRAM ROUTE SOCIAL PUBLISH ERROR:", e));
       }
+
+      // Telegram channel URL (if published there)
+      const telegramChannelUrl = hasTelegram && process.env.TELEGRAM_CHANNEL_ID
+        ? `https://t.me/classifiedsuaeofficial`
+        : null;
 
       return NextResponse.json({
         success: true,
         id:      submission.id,
         free:    true,
         adId:    ad.id,
-        adUrl,
-        facebookUrl,
-        instagramUrl,
+        adUrl:           hasWebsite ? adUrl : null,
+        // Note: social URLs are resolved asynchronously — the bot shows generic
+        // platform links because carousels/posts may still be publishing.
+        // Social posts publish asynchronously — return the ad page URL as the canonical link
+        // for all platforms. The actual social post URLs are saved in the DB when they complete.
+        facebookUrl:  hasFacebook  ? adUrl : null,
+        instagramUrl: hasInstagram ? adUrl : null,
+        xUrl:         hasX         ? adUrl : null,
+        telegramChannelUrl,
         telegramChatId: chatId ? String(chatId) : null,
+        publishTarget,
       });
     }
 
@@ -322,7 +336,7 @@ export async function POST(req: Request) {
         submissionId: submission.id,
         provider:     "telegram",
         providerRef,
-        amount:       roundedPrice,
+        amount:       packagePrice,
         currency:     "AED",
         status:       "PENDING",
       },

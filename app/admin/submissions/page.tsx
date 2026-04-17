@@ -15,21 +15,32 @@ export default function SubmissionsPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [statusFilter, setStatusFilter] = useState("");
+  const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
 
-  async function load(status?: string) {
+  useEffect(() => {
+    const timer = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(timer);
+  }, [search]);
+
+  async function load() {
     setLoading(true);
-    const url = status ? `/api/admin/submissions?status=${status}` : "/api/admin/submissions";
+    const params = new URLSearchParams();
+    if (statusFilter) params.set("status", statusFilter);
+    if (debouncedSearch) params.set("search", debouncedSearch);
+    const qs = params.toString();
+    const url = qs ? `/api/admin/submissions?${qs}` : "/api/admin/submissions";
     const d = await (await fetch(url)).json();
     if (d.ok) setSubmissions(d.submissions);
     setLoading(false);
   }
 
-  useEffect(() => { load(statusFilter || undefined); }, [statusFilter]);
+  useEffect(() => { load(); }, [statusFilter, debouncedSearch]);
 
-  async function approve(id: string) { await fetch(`/api/admin/submissions/${id}/approve`, { method: "POST" }); load(statusFilter || undefined); }
+  async function approve(id: string) { await fetch(`/api/admin/submissions/${id}/approve`, { method: "POST" }); load(); }
   async function reject(id: string) {
     if (!confirm(t("Reject this submission?", "رفض هذا الطلب؟"))) return;
-    await fetch(`/api/admin/submissions/${id}/reject`, { method: "POST" }); load(statusFilter || undefined);
+    await fetch(`/api/admin/submissions/${id}/reject`, { method: "POST" }); load();
   }
 
   const cardStyle: React.CSSProperties = { backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "1rem", marginBottom: "0.625rem" };
@@ -37,7 +48,18 @@ export default function SubmissionsPage() {
 
   return (
     <div>
-      <h1 style={{ color: "var(--text)", fontWeight: 800, fontSize: "1.5rem", marginBottom: "1.25rem" }}>{t("Submissions", "الطلبات")}</h1>
+      <h1 style={{ color: "var(--text)", fontWeight: 800, fontSize: "1.5rem", marginBottom: "1rem" }}>{t("Submissions", "الطلبات")}</h1>
+      <input
+        type="text"
+        value={search}
+        onChange={e => setSearch(e.target.value)}
+        placeholder={t("Search by phone, text, title, ID, category…", "ابحث بالهاتف، النص، العنوان، المعرّف، الفئة…")}
+        style={{
+          width: "100%", padding: "0.625rem 1rem", borderRadius: "var(--radius-md)",
+          border: "1.5px solid var(--border)", backgroundColor: "var(--surface)",
+          color: "var(--text)", fontSize: "0.875rem", outline: "none", marginBottom: "1rem", boxSizing: "border-box",
+        }}
+      />
       <div style={{ display: "flex", gap: "0.375rem", flexWrap: "wrap", marginBottom: "1.25rem" }}>
         {["", "DRAFT", "WAITING_PAYMENT", "PAID", "PENDING_REVIEW", "PUBLISHED", "REJECTED", "EXPIRED"].map(s => (
           <button key={s} onClick={() => setStatusFilter(s)}
