@@ -3,6 +3,7 @@ import { PrismaClient } from "@prisma/client";
 import type { NextRequest } from "next/server";
 import crypto from "crypto";
 import { publishToSocial } from "@/lib/social-publisher";
+import { buildFollowUsText, type FollowPlatform } from "@/lib/follow-us";
 import { generateAdId } from "@/lib/ad-id";
 
 const prisma = new PrismaClient();
@@ -51,9 +52,47 @@ export async function POST(req: NextRequest) {
     const providerRef = String(body?.data?.id ?? "").trim();
     if (!providerRef) return NextResponse.json({ ok: false, error: "PROVIDER_REF_REQUIRED" }, { status: 400 });
 
+    // ── Branch: company subscription payments ───────────────────────────────
+    // Detect early so the existing AD flow stays untouched.
+    const preliminaryPayment = await prisma.payment.findUnique({
+      where: { providerRef },
+      select: { id: true, purpose: true, status: true, companyId: true },
+    });
+    if (!preliminaryPayment) {
+      return NextResponse.json({ ok: false, error: "PAYMENT_NOT_FOUND" }, { status: 404 });
+    }
+    if (preliminaryPayment.purpose === "COMPANY_SUBSCRIPTION") {
+      if (preliminaryPayment.status === "SUCCESS") {
+        return NextResponse.json({ ok: true, alreadyProcessed: true });
+      }
+      if (!preliminaryPayment.companyId) {
+        return NextResponse.json({ ok: false, error: "PAYMENT_HAS_NO_COMPANY" }, { status: 400 });
+      }
+      const startedAt = new Date();
+      const endsAt = new Date(startedAt);
+      endsAt.setMonth(endsAt.getMonth() + 1); // monthly billing
+      await prisma.$transaction([
+        prisma.payment.update({
+          where: { id: preliminaryPayment.id },
+          data: { status: "SUCCESS", rawPayload: { webhook: body } },
+        }),
+        prisma.company.update({
+          where: { id: preliminaryPayment.companyId },
+          data: {
+            subscriptionStatus: "ACTIVE",
+            subscriptionStartedAt: startedAt,
+            subscriptionEndsAt: endsAt,
+          },
+        }),
+      ]);
+      console.log("[CompanyWebhook] subscription ACTIVE for companyId=%s", preliminaryPayment.companyId);
+      return NextResponse.json({ ok: true, paymentStatus: "SUCCESS", kind: "company" });
+    }
+
     const result = await prisma.$transaction(async (tx) => {
       const payment = await tx.payment.findUnique({ where: { providerRef }, include: { submission: true } });
       if (!payment) throw new Error("PAYMENT_NOT_FOUND");
+      if (!payment.submission) throw new Error("PAYMENT_HAS_NO_SUBMISSION");
 
       // Detect republish: the Payment record was tagged by /api/user/republish-confirm.
       // We preserve the tag across the webhook-body overwrite below.
@@ -61,10 +100,10 @@ export async function POST(req: NextRequest) {
       const isRepublish = prevPayload?.isRepublish === true;
       const republishDurationDays = Number(prevPayload?.durationDays) || null;
 
-      const existingAd = await tx.ad.findUnique({ where: { submissionId: payment.submissionId } });
+      const existingAd = await tx.ad.findUnique({ where: { submissionId: payment.submission.id } });
 
       if (payment.status === "SUCCESS" && existingAd && existingAd.status === "PUBLISHED") {
-        await tx.adSubmission.update({ where: { id: payment.submissionId }, data: { status: "PUBLISHED" } });
+        await tx.adSubmission.update({ where: { id: payment.submission.id }, data: { status: "PUBLISHED" } });
         return { alreadyProcessed: true };
       }
 
@@ -84,7 +123,7 @@ export async function POST(req: NextRequest) {
           where: { id: existingAd.id },
           data: { status: "PUBLISHED", publishedAt: new Date(), expiresAt, deletedAt: null },
         });
-        await tx.adSubmission.update({ where: { id: payment.submissionId }, data: { status: "PUBLISHED" } });
+        await tx.adSubmission.update({ where: { id: payment.submission.id }, data: { status: "PUBLISHED" } });
 
         const revivedMedia = await tx.media.findMany({ where: { adId: existingAd.id }, orderBy: { position: "asc" } });
         return {
@@ -102,6 +141,8 @@ export async function POST(req: NextRequest) {
             text: payment.submission.text ?? "",
             publishTarget: (payment.submission as any).publishTarget ?? "website",
             telegramUsername: (payment.submission as any).telegramUsername ?? null,
+            source: (payment.submission as any).source ?? null,
+            language: payment.submission.language ?? "en",
           },
           ad: { id: revived.id, title: revived.title || "Ad", status: revived.status, expiresAt: revived.expiresAt, isFeatured: revived.isFeatured, category: revived.category },
           mediaUrls: revivedMedia.map(m => m.url),
@@ -110,11 +151,11 @@ export async function POST(req: NextRequest) {
 
       if (existingAd) {
         // Normal case: ad exists and already PUBLISHED (rare race)
-        await tx.adSubmission.update({ where: { id: payment.submissionId }, data: { status: "PUBLISHED" } });
+        await tx.adSubmission.update({ where: { id: payment.submission.id }, data: { status: "PUBLISHED" } });
         return { alreadyProcessed: true };
       }
 
-      const submission = await tx.adSubmission.update({ where: { id: payment.submissionId }, data: { status: "PAID" } });
+      const submission = await tx.adSubmission.update({ where: { id: payment.submission.id }, data: { status: "PAID" } });
       const rawText = (submission.text || "").trim();
       if (!rawText || rawText.length < 5) throw new Error("INVALID_AD_TEXT");
 
@@ -149,10 +190,12 @@ export async function POST(req: NextRequest) {
           offerEndDate: submission.offerEndDate,
           isFeatured,
           isPinned,
+          location: (submission as any).location ?? null,
+          subCategory: (submission as any).subCategory ?? null,
           status: "PUBLISHED",
           publishedAt: new Date(),
           expiresAt,
-        },
+        } as any,
       });
 
       const tempMedia = await tx.submissionMedia.findMany({ where: { submissionId: submission.id }, orderBy: { position: "asc" } });
@@ -176,6 +219,8 @@ export async function POST(req: NextRequest) {
           text:           submission.text ?? "",
           publishTarget:  (submission as any).publishTarget  ?? "website",
           telegramUsername: (submission as any).telegramUsername ?? null,
+          source:         (submission as any).source         ?? null,
+          language:       submission.language ?? "en",
         },
         ad: { id: ad.id, title: ad.title || "Ad", status: ad.status, expiresAt: ad.expiresAt, isFeatured, category: ad.category },
         mediaUrls: tempMedia.map(m => normalizeMediaUrl(m.tempKey)),
@@ -207,20 +252,21 @@ export async function POST(req: NextRequest) {
 
         const priceVal = subObj.adPrice;
         const isNeg = subObj.isNegotiable;
+        // Captions are emoji-free per spec.
         const priceLine = priceVal
-          ? `\n💰 ${Number(priceVal).toLocaleString("en-AE")} AED${isNeg ? " · Negotiable" : ""}`
-          : isNeg ? "\n💰 Negotiable" : "";
+          ? `\n${Number(priceVal).toLocaleString("en-AE")} AED${isNeg ? " · Negotiable" : ""}`
+          : isNeg ? "\nNegotiable" : "";
 
         const desc = (subObj.text || "").slice(0, 700);
         const ellipsis = (subObj.text?.length ?? 0) > 700 ? "..." : "";
-        const callLine = hasCall ? `\n📞 +${callPhone}` : "";
-        const channelText = `📢 ${adTitle}\n🗂 ${adObj.category}${priceLine}${callLine}\n\n${desc}${ellipsis}\n\n🔗 ${adUrl}`;
+        const callLine = hasCall ? `\nCall: +${callPhone}` : "";
+        const channelText = `${adTitle}\n${adObj.category}${priceLine}${callLine}\n\n${desc}${ellipsis}\n\n${adUrl}`;
 
         const tgUsername = subObj.telegramUsername || "";
         const buttons: { text: string; url: string }[] = [];
-        if (hasWA)  buttons.push({ text: "💬 WhatsApp", url: `https://wa.me/${waNumber}` });
-        if (hasTg && tgUsername) buttons.push({ text: "✈️ Telegram", url: `https://t.me/${tgUsername}` });
-        buttons.push({ text: "🔗 View Ad", url: adUrl });
+        if (hasWA)  buttons.push({ text: "WhatsApp", url: `https://wa.me/${waNumber}` });
+        if (hasTg && tgUsername) buttons.push({ text: "Telegram", url: `https://t.me/${tgUsername}` });
+        buttons.push({ text: "View Ad", url: adUrl });
         const replyMarkup = { inline_keyboard: [buttons] };
 
         // Try sending images — sendMediaGroup for multiple, sendPhoto for single
@@ -248,7 +294,7 @@ export async function POST(req: NextRequest) {
             const btnRes = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
               method: "POST",
               headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ chat_id: TELEGRAM_CHANNEL_ID, text: `🔗 ${adUrl}`, reply_markup: replyMarkup }),
+              body: JSON.stringify({ chat_id: TELEGRAM_CHANNEL_ID, text: adUrl, reply_markup: replyMarkup }),
             }).catch(() => null);
             const btnJson = await btnRes?.json().catch(() => null);
             if (btnJson?.result?.message_id) allMsgIds.push(btnJson.result.message_id);
@@ -314,9 +360,9 @@ export async function POST(req: NextRequest) {
         const phone2 = (subObj.contactPhone || subObj.phone || "").replace(/\D/g, "");
         const waNum2 = (subObj.whatsappNumber || "").replace(/\D/g, "");
         const contactLines2: string[] = [];
-        if (methods2.includes("call") && phone2) contactLines2.push(`📞 +${phone2}`);
-        if (methods2.includes("whatsapp") && waNum2) contactLines2.push(`💬 wa.me/${waNum2}`);
-        if (methods2.includes("telegram")) contactLines2.push(`✈️ Telegram`);
+        if (methods2.includes("call") && phone2) contactLines2.push(`Call: +${phone2}`);
+        if (methods2.includes("whatsapp") && waNum2) contactLines2.push(`WhatsApp: wa.me/${waNum2}`);
+        if (methods2.includes("telegram")) contactLines2.push(`Telegram`);
 
         const socialResult = await publishToSocial({
           title: adTitle,
@@ -347,19 +393,37 @@ export async function POST(req: NextRequest) {
       }
     } catch (e) { console.error("SOCIAL PUBLISH ERROR (webhook):", e); }
 
+    // ── Build the platform-links block once, used by both DM channels ────────
+    const linksAr: string[] = [];
+    const linksEn: string[] = [];
+    if (webhookPubTarget.includes("website")) {
+      linksAr.push(`🌍 الموقع:\n${adUrl}`);
+      linksEn.push(`🌍 Website:\n${adUrl}`);
+    }
+    if (webhookPubTarget.includes("telegram")) {
+      linksAr.push(`📱 قناة تيليغرام`);
+      linksEn.push(`📱 Telegram Channel`);
+    }
+    if (facebookUrl)  { linksAr.push(`📘 فيسبوك:\n${facebookUrl}`);   linksEn.push(`📘 Facebook:\n${facebookUrl}`); }
+    if (instagramUrl) { linksAr.push(`📷 انستقرام:\n${instagramUrl}`); linksEn.push(`📷 Instagram:\n${instagramUrl}`); }
+    if (xUrl)         { linksAr.push(`✖️ X:\n${xUrl}`);                linksEn.push(`✖️ X:\n${xUrl}`); }
+    if (linksEn.length === 0) {
+      linksAr.push(`🔗 ${adUrl}`);
+      linksEn.push(`🔗 ${adUrl}`);
+    }
+
+    // Follow-us snippet — same platforms the ad was posted to, our brand pages.
+    const followPlatforms: FollowPlatform[] = ["website", "telegram", "facebook", "instagram", "x"]
+      .filter(p => webhookPubTarget.includes(p)) as FollowPlatform[];
+    const followAr = buildFollowUsText(followPlatforms, "ar");
+    const followEn = buildFollowUsText(followPlatforms, "en");
+
     // ── Notify user via Telegram DM with all links ───────────────────────────
     try {
       const chatId = subObj.telegramChatId;
       if (chatId && botToken) {
-        const links: string[] = [];
-        if (webhookPubTarget.includes("website")) links.push(`🌍 Website:\n${adUrl}`);
-        if (facebookUrl)  links.push(`📘 Facebook:\n${facebookUrl}`);
-        if (instagramUrl) links.push(`📷 Instagram:\n${instagramUrl}`);
-        if (xUrl)         links.push(`✖️ X:\n${xUrl}`);
-        if (webhookPubTarget.includes("telegram")) links.push(`📱 Telegram Channel`);
-
-        const dmText = `✅ Your ad is live!\n\n📌 ${adTitle}\n\n🔗 Your ad links:\n${links.join("\n\n")}\n\nThank you for using Classifieds UAE.\nUse /start to post a new ad.`;
-
+        const followBlock = followEn ? `\n\n${followEn}` : "";
+        const dmText = `✅ Your ad is live!\n\n📌 ${adTitle}\n\n🔗 Your ad links:\n${linksEn.join("\n\n")}${followBlock}\n\nThank you for using Classifieds UAE.\nUse /start to post a new ad.`;
         await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -368,10 +432,25 @@ export async function POST(req: NextRequest) {
       }
     } catch (e) { console.error("TELEGRAM DM FAILED:", e); }
 
+    // ── Notify user via WhatsApp DM with all links (mirrors Telegram path) ──
+    // Only if the submission was created by the WhatsApp bot.
+    try {
+      if ((subObj as any).source === "whatsapp" && subObj.phone) {
+        const lang = ((subObj as any).language || "en") === "ar" ? "ar" : "en";
+        const links = lang === "ar" ? linksAr : linksEn;
+        const followBlock = lang === "ar" ? (followAr ? `\n\n${followAr}` : "") : (followEn ? `\n\n${followEn}` : "");
+        const dmText = lang === "ar"
+          ? `✅ تم نشر إعلانك!\n\n📌 ${adTitle}\n\n🔗 روابط إعلانك:\n${links.join("\n\n")}${followBlock}\n\nشكراً لاستخدامك Classifieds UAE.\nاكتب *start* لنشر إعلان جديد.`
+          : `✅ Your ad is live!\n\n📌 ${adTitle}\n\n🔗 Your ad links:\n${links.join("\n\n")}${followBlock}\n\nThank you for using Classifieds UAE.\nType *start* to post a new ad.`;
+        const { sendText } = await import("@/services/whatsapp");
+        await sendText(subObj.phone, dmText);
+      }
+    } catch (e) { console.error("WHATSAPP DM FAILED:", e); }
+
     return NextResponse.json({ ok: true, paymentStatus: "SUCCESS", adId: result.ad!.id });
   } catch (err: any) {
     if (err.message === "PAYMENT_NOT_FOUND") return NextResponse.json({ ok: false, error: "PAYMENT_NOT_FOUND" }, { status: 404 });
     if (err.message === "INVALID_AD_TEXT") return NextResponse.json({ ok: false, error: "INVALID_AD_TEXT" }, { status: 400 });
-    return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: err?.message ?? "" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: "An error occurred" }, { status: 500 });
   }
 }

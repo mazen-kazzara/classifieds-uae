@@ -52,6 +52,6 @@ export async function GET(req: NextRequest) {
     ]);
     return NextResponse.json({ ok: true, page, limit, totalCount, totalPages: Math.ceil(totalCount / limit), ads });
   } catch (err: unknown) {
-    return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: err instanceof Error ? err.message : "" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: "An error occurred" }, { status: 500 });
   }
 }

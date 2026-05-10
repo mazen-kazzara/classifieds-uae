@@ -4,19 +4,29 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { getTranslations } from "@/lib/getTranslations";
+import { isUAEFlagAvailable } from "@/lib/plan-config";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Pricing | Classifieds UAE" };
+export const metadata: Metadata = {
+  title: "Pricing & Plans — Free, Basic, Standard & Premium | Classifieds UAE",
+  description: "Compare Classifieds UAE ad plans. Post free classified ads or upgrade for more reach — Basic (5 AED), Standard (9 AED), Premium (15 AED). Publish to Website, Facebook, Instagram, Telegram & X.",
+  alternates: {
+    canonical: "https://classifiedsuae.ae/en/pricing",
+    languages: { en: "https://classifiedsuae.ae/en/pricing", ar: "https://classifiedsuae.ae/ar/pricing", "x-default": "https://classifiedsuae.ae/en/pricing" },
+  },
+};
 
 export default async function PricingPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
   const t = getTranslations(locale, "pricing");
   const isAr = locale === "ar";
-  const packages = await prisma.package.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } });
+  const showUAEFlag = isUAEFlagAvailable();
+  const allPackages = await prisma.package.findMany({ where: { isActive: true }, orderBy: { sortOrder: "asc" } });
+  const packages = showUAEFlag ? allPackages : allPackages.filter(p => p.name !== "UAE Flag");
 
   const publishSentence = isAr
-    ? "يمكن نشر إعلانك على الموقع، فيسبوك، انستقرام، X، أو قناة تيليغرام — بشكل فردي أو بأي مجموعة بناءً على اختيارك."
-    : "Your ad can be published to the website, Facebook, Instagram, X, or Telegram channel — individually or in any combination based on your selection.";
+    ? "يمكن نشر إعلانك على الموقع، فيسبوك، انستقرام، X، أو قناة تيليغرام — بشكل فردي أو بأي مجموعة بناءً على اختيارك. النشر على X متاح فقط في الخطط المدفوعة."
+    : "Your ad can be published to the website, Facebook, Instagram, X, or Telegram channel — individually or in any combination based on your selection. Publishing on X is available on paid plans only.";
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }} dir={isAr ? "rtl" : "ltr"}>
@@ -27,7 +37,7 @@ export default async function PricingPage({ params }: { params: Promise<{ locale
           <p style={{ color: "var(--text-muted)", fontSize: "1.0625rem" }}>{t("subtitle")}</p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4" style={{ marginBottom: "2rem", alignItems: "stretch" }}>
+        <div className={`grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-${packages.length} gap-4`} style={{ marginBottom: "2rem", alignItems: "stretch" }}>
           {packages.map(pkg => {
             const isStandard = pkg.name === "Standard";
             const isUAEFlag = pkg.name === "UAE Flag";

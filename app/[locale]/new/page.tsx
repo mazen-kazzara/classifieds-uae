@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import { UAE_LOCATIONS, SUBCATEGORIES, getSubCategoriesFor } from "@/lib/locations-cars";
 
 interface Category { id: string; name: string; nameAr: string; slug: string; icon?: string; }
 interface Package { id: string; name: string; nameAr: string; description?: string; price: number; durationDays: number; maxChars: number; maxImages: number; isFeatured: boolean; isPinned: boolean; includesTelegram: boolean; promoEndDate?: string | null; isPromoActive?: boolean; }
@@ -25,7 +26,9 @@ const inputError: React.CSSProperties = { borderColor: "var(--danger)" };
 const labelStyle: React.CSSProperties = { display: "block", fontSize: "0.8125rem", fontWeight: 600, color: "var(--text)", marginBottom: "0.375rem" };
 const hintStyle: React.CSSProperties = { fontSize: "0.75rem", color: "var(--text-muted)" };
 
-// Display durations for UI (Free shows 3 days for UX, backend stores 14)
+// Display durations for UI. Values mirror the DB Package.durationDays for the
+// canonical plans; this helper exists so the picker can render durations even
+// before the package object is loaded.
 function getDisplayDuration(planName: string): number {
   switch (planName) {
     case "Free": return 3;
@@ -62,6 +65,8 @@ function NewAdForm() {
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [categoryId, setCategoryId] = useState("");
+  const [location, setLocation] = useState("");
+  const [subCategory, setSubCategory] = useState("");
   const [adPriceRaw, setAdPriceRaw] = useState("");
   const [isNegotiable, setIsNegotiable] = useState(false);
   const [contactPhone, setContactPhone] = useState("971");
@@ -77,7 +82,17 @@ function NewAdForm() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [packages, setPackages] = useState<Package[]>([]);
   const [isAdminUser, setIsAdminUser] = useState(false);
+  // Active company subscription context — set after /api/submissions/start.
+  // When present, the package step is skipped and the plan banner is shown.
+  const [companyContext, setCompanyContext] = useState<{
+    id: string;
+    name: string;
+    plan: { name: string; nameAr: string; maxAdChars: number; maxAdImages: number };
+  } | null>(null);
 
+  const selectedCat = categories.find(c => c.id === categoryId);
+  const catSubCategories = selectedCat ? getSubCategoriesFor(selectedCat.slug) : [];
+  const hasSubCategories = catSubCategories.length > 0;
   const maxChars = selectedPackage?.maxChars ?? 150;
   const maxImages = selectedPackage?.maxImages ?? 1;
   const packagePrice = selectedPackage?.price ?? 0;
@@ -96,7 +111,10 @@ function NewAdForm() {
       fetch("/api/public/packages").then(r => r.json()),
     ]).then(([cats, pkgs]) => {
       setCategories(cats.categories || []);
-      const allPkgs = pkgs.packages || [];
+      // Remove UAE Flag plan after May 1, 2026 00:00 UAE time (Apr 30 20:00 UTC)
+      const cutoff = new Date("2026-04-30T20:00:00Z");
+      const pastMay1 = new Date() >= cutoff;
+      const allPkgs = (pkgs.packages || []).filter((p: Package) => pastMay1 ? p.name !== "UAE Flag" : true);
       setPackages(allPkgs);
       // Pre-select: from URL param, or default to Standard
       if (presetPkg) {
@@ -140,6 +158,8 @@ function NewAdForm() {
     if (!description.trim() || description.trim().length < 10) errs.description = locale === "ar" ? "الوصف يجب أن يكون 10 أحرف على الأقل" : "Description must be at least 10 characters";
     if (description.trim().length > maxChars) errs.description = locale === "ar" ? `الوصف يجب أن لا يتجاوز ${maxChars} حرف` : `Description must be under ${maxChars} characters`;
     if (!categoryId) errs.category = locale === "ar" ? "يرجى اختيار فئة" : "Please select a category";
+    if (!location) errs.location = locale === "ar" ? "يرجى اختيار الموقع" : "Please select a location";
+    if (hasSubCategories && !subCategory) errs.subCategory = locale === "ar" ? "يرجى اختيار التصنيف الفرعي" : "Please select a sub-category";
     if (!isNegotiable) {
       if (!adPriceRaw) errs.adPrice = "Price is required unless negotiable";
       else if (isNaN(Number(adPriceRaw.replace(/,/g,""))) || Number(adPriceRaw.replace(/,/g,"")) < 0)
@@ -187,6 +207,26 @@ function NewAdForm() {
         setSelectedPackage({ id: "admin-unlimited", name: "Admin Unlimited", nameAr: "إدارة بلا حدود", price: 0, durationDays: 365, maxChars: 99999, maxImages: 99, isFeatured: true, isPinned: true, includesTelegram: true } as Package);
         setImages(Array(20).fill(null)); // generous image slots
         setStep("details");
+      } else if (data.isCompany && data.company) {
+        // Active company subscription — skip plan selection, apply company plan limits.
+        const c = data.company;
+        console.log("[/new] company detected", { id: c.id, name: c.name, plan: c.plan?.slug });
+        setCompanyContext({ id: c.id, name: c.name, plan: { name: c.plan.name, nameAr: c.plan.nameAr, maxAdChars: c.plan.maxAdChars, maxAdImages: c.plan.maxAdImages } });
+        // Synthetic package object so the existing UI machinery (chars/images limits, summary) just works.
+        setSelectedPackage({
+          id: "__company__",
+          name: c.plan.name,
+          nameAr: c.plan.nameAr,
+          price: 0,
+          durationDays: 30,
+          maxChars: c.plan.maxAdChars,
+          maxImages: c.plan.maxAdImages,
+          isFeatured: false,
+          isPinned: false,
+          includesTelegram: true,
+        } as Package);
+        setImages(Array(c.plan.maxAdImages).fill(null));
+        setStep("details");
       } else {
         setStep("package");
       }
@@ -212,7 +252,10 @@ function NewAdForm() {
       if (!textData.ok) { if (textData.field) setFieldErrors(e => ({ ...e, [textData.field]: textData.error })); throw new Error(textData.message || textData.error || "Failed"); }
       const contactData = await safeJson(await fetch(`/api/submissions/${submissionId}/contact`, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ contactPhone, whatsappNumber: whatsappNumber || null, contactMethod, contentType, offerStartDate: offerStartDate || null, offerEndDate: offerEndDate || null, bookingEnabled, bookingType, publishTarget: publishPlatforms.join("+") }),
+        // "all-emirates" is virtual — store null so the existing
+        // category/{slug}/{location} filter treats the ad as emirate-agnostic.
+        // Mirrors the WhatsApp + Telegram bot behaviour.
+        body: JSON.stringify({ contactPhone, whatsappNumber: whatsappNumber || null, contactMethod, contentType, offerStartDate: offerStartDate || null, offerEndDate: offerEndDate || null, bookingEnabled, bookingType, publishTarget: publishPlatforms.join("+"), location: (location && location !== "all-emirates") ? location : null, subCategory: subCategory || null }),
       }), "contact");
       if (!contactData.ok) throw new Error("Failed to save contact");
 
@@ -239,7 +282,13 @@ function NewAdForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ packageId: selectedPackage?.id ?? null })
       });
-      if (!resPkg.ok) throw new Error("Failed to save package");
+      if (!resPkg.ok) {
+        const pkgData = await resPkg.json().catch(() => ({}));
+        if (pkgData.error === "FREE_DAILY_LIMIT_REACHED") {
+          throw new Error(locale === "ar" ? pkgData.messageAr : pkgData.message);
+        }
+        throw new Error("Failed to save package");
+      }
 
       await new Promise(r => setTimeout(r, 500));
 
@@ -270,16 +319,52 @@ function NewAdForm() {
   );
   if (authStatus === "unauthenticated") return null;
 
+  // Admins and active company users skip the package step entirely.
+  const skipPackageStep = isAdminUser || !!companyContext;
+  const stepKeys = (skipPackageStep
+    ? (["type", "details", "done"] as const)
+    : (["type", "package", "details", "done"] as const)) as readonly ("type" | "package" | "details" | "done")[];
+
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }} dir={locale === "ar" ? "rtl" : "ltr"}>
       <Header />
       <main className="max-w-2xl mx-auto px-4 py-8" style={{ textAlign: locale === "ar" ? "right" : "left" }}>
+        {/* Active company subscription banner */}
+        {companyContext && (
+          <div style={{
+            backgroundColor: "color-mix(in srgb, var(--primary) 10%, var(--surface))",
+            border: "1.5px solid color-mix(in srgb, var(--primary) 35%, var(--border))",
+            borderRadius: "var(--radius-md)",
+            padding: "0.875rem 1rem",
+            marginBottom: "1rem",
+            display: "flex",
+            alignItems: "center",
+            gap: "0.75rem",
+          }}>
+            <span style={{ fontSize: "1.25rem" }}>🏢</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: "0.875rem", fontWeight: 700, color: "var(--text)" }}>
+                {locale === "ar"
+                  ? `اشتراكك مفعّل (${companyContext.plan.nameAr})`
+                  : `Your subscription is active (${companyContext.plan.name})`}
+              </div>
+              <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.125rem" }}>
+                {locale === "ar"
+                  ? `${companyContext.plan.maxAdChars} حرف · ${companyContext.plan.maxAdImages} صور · إعلانات غير محدودة`
+                  : `${companyContext.plan.maxAdChars} chars · ${companyContext.plan.maxAdImages} images · unlimited ads`}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* Progress */}
         <div className="flex items-center gap-2 mb-8">
-          {(["type", "package", "details", "done"] as const).map((stepKey, i) => {
-            const label = [t("stepType"), t("stepPlan"), t("stepDetails"), t("stepPublish")][i];
-            const isCompleted = STEPS[step] > i + 1;
-            const isActive = STEPS[step] === i + 1;
+          {stepKeys.map((stepKey, i) => {
+            const allLabels: Record<string, string> = { type: t("stepType"), package: t("stepPlan"), details: t("stepDetails"), done: t("stepPublish") };
+            const label = allLabels[stepKey];
+            const stepOrder: Record<string, number> = Object.fromEntries(stepKeys.map((k, idx) => [k, idx + 1]));
+            const isCompleted = (stepOrder[step] ?? 0) > i + 1;
+            const isActive = (stepOrder[step] ?? 0) === i + 1;
             const isClickable = isCompleted && stepKey !== "done";
             return (
               <div key={label} className="flex items-center gap-1.5 flex-1">
@@ -301,7 +386,7 @@ function NewAdForm() {
                   {isCompleted ? "✓" : i + 1}
                 </div>
                 <span style={{ color: isActive ? "var(--primary)" : "var(--text-muted)", fontSize: "0.75rem", fontWeight: 500 }} className="hidden sm:block">{label}</span>
-                {i < 3 && <div style={{ flex: 1, height: 1.5, backgroundColor: "var(--border)" }} />}
+                {i < stepKeys.length - 1 && <div style={{ flex: 1, height: 1.5, backgroundColor: "var(--border)" }} />}
               </div>
             );
           })}
@@ -489,11 +574,37 @@ function NewAdForm() {
               <label style={labelStyle}>{locale === "ar" ? "الفئة" : "Category"} <span style={{ color: "var(--danger)" }}>*</span></label>
               <select style={{ ...inputBase, ...(fieldErrors.category ? inputError : {}), appearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.75rem center", paddingRight: "2.5rem" }}
                 value={categoryId}
-                onChange={(e) => { setCategoryId(e.target.value); setFieldErrors(fe => ({ ...fe, category: "" })); }}>
+                onChange={(e) => { setCategoryId(e.target.value); setSubCategory(""); setFieldErrors(fe => ({ ...fe, category: "", subCategory: "" })); }}>
                 <option value="">{locale === "ar" ? "اختر فئة" : "Select category"}</option>
                 {categories.map((c) => <option key={c.id} value={c.id}>{c.icon} {locale === "ar" ? c.nameAr : c.name}</option>)}
               </select>
               {fieldErr(fieldErrors, "category")}
+            </div>
+
+            {/* Sub-category (dynamic per category) */}
+            {hasSubCategories && (
+              <div>
+                <label style={labelStyle}>{locale === "ar" ? "التصنيف الفرعي" : "Sub-category"} <span style={{ color: "var(--danger)" }}>*</span></label>
+                <select style={{ ...inputBase, ...(fieldErrors.subCategory ? inputError : {}), appearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.75rem center", paddingRight: "2.5rem" }}
+                  value={subCategory}
+                  onChange={(e) => { setSubCategory(e.target.value); setFieldErrors(fe => ({ ...fe, subCategory: "" })); }}>
+                  <option value="">{locale === "ar" ? "اختر التصنيف الفرعي" : "Select sub-category"}</option>
+                  {catSubCategories.map((b) => <option key={b.value} value={b.value}>{locale === "ar" ? b.ar : b.en}</option>)}
+                </select>
+                {fieldErr(fieldErrors, "subCategory")}
+              </div>
+            )}
+
+            {/* Location */}
+            <div>
+              <label style={labelStyle}>{locale === "ar" ? "الموقع" : "Location"} <span style={{ color: "var(--danger)" }}>*</span></label>
+              <select style={{ ...inputBase, ...(fieldErrors.location ? inputError : {}), appearance: "none", backgroundImage: "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23666' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E\")", backgroundRepeat: "no-repeat", backgroundPosition: "right 0.75rem center", paddingRight: "2.5rem" }}
+                value={location}
+                onChange={(e) => { setLocation(e.target.value); setFieldErrors(fe => ({ ...fe, location: "" })); }}>
+                <option value="">{locale === "ar" ? "اختر الإمارة" : "Select emirate"}</option>
+                {UAE_LOCATIONS.map((l) => <option key={l.value} value={l.value}>{locale === "ar" ? l.ar : l.en}</option>)}
+              </select>
+              {fieldErr(fieldErrors, "location")}
             </div>
 
             {/* Price */}
@@ -633,7 +744,11 @@ function NewAdForm() {
                   { key: "facebook",  ar: "فيسبوك",    en: "Facebook" },
                   { key: "instagram", ar: "انستقرام",   en: "Instagram" },
                   { key: "x",         ar: "X",          en: "X" },
-                ] as const).map((p) => {
+                ] as const).filter((p) => {
+                  // Free plan cannot publish on X
+                  if (p.key === "x" && isFree) return false;
+                  return true;
+                }).map((p) => {
                   const isOn = publishPlatforms.includes(p.key);
                   const label = locale === "ar" ? p.ar : p.en;
                   return (

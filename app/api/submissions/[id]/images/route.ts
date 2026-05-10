@@ -4,16 +4,24 @@ import type { NextRequest } from "next/server";
 import { randomUUID } from "crypto";
 import { writeFile, mkdir } from "fs/promises";
 import path from "path";
+import { applyWatermark } from "@/lib/image-watermark";
 
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
   try {
     const { id } = await context.params;
-    const s = await prisma.adSubmission.findUnique({ where: { id }, include: { package: true } });
+    // Validate ID format — prevent path traversal
+    if (!/^[a-zA-Z0-9_-]+$/.test(id)) return NextResponse.json({ ok: false, error: "INVALID_ID" }, { status: 400 });
+    const s = await prisma.adSubmission.findUnique({
+      where: { id },
+      include: { package: true, company: { include: { plan: true } } },
+    });
     if (!s) return NextResponse.json({ ok: false, error: "NOT_FOUND" }, { status: 404 });
     if (s.status !== "DRAFT") return NextResponse.json({ ok: false, error: "CANNOT_EDIT" }, { status: 400 });
 
-    // Enforce image limit from selected package
-    const maxImages = s.package?.maxImages ?? 6;
+    // Company plan limits override per-ad package limits.
+    const maxImages = s.company?.plan?.maxAdImages ?? s.package?.maxImages ?? 6;
+    const limitSource = s.company ? `company:${s.company.plan?.slug}` : (s.package ? `package:${s.package.name}` : "default");
+    console.log(`[plan] submission=${id} maxImages=${maxImages} source=${limitSource}`);
     const form = await req.formData();
     const file = form.get("file");
     const position = Number(String(form.get("position") ?? "").trim());
@@ -27,7 +35,9 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     const filename = `${randomUUID()}${ext}`;
     const subDir = path.join(process.cwd(), "public", "uploads", id);
     await mkdir(subDir, { recursive: true });
-    await writeFile(path.join(subDir, filename), Buffer.from(await file.arrayBuffer()));
+    const original = Buffer.from(await file.arrayBuffer());
+    const watermarked = await applyWatermark(original, { mimeType: file.type });
+    await writeFile(path.join(subDir, filename), watermarked);
 
     const relativePath = `${id}/${filename}`;
     const expiresAt = new Date(Date.now() + 6 * 60 * 60 * 1000);
@@ -45,6 +55,6 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
     return NextResponse.json({ ok: true, url: `/uploads/${relativePath}`, imagesCount: media.length, priceTotal: packagePrice });
   } catch (err: unknown) {
-    return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: err instanceof Error ? err.message : "" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: "An error occurred" }, { status: 500 });
   }
 }

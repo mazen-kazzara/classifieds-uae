@@ -21,9 +21,11 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
       bookingType: body?.bookingType || null,
       offerStartDate: body?.offerStartDate ? new Date(body.offerStartDate) : null,
       offerEndDate: body?.offerEndDate ? new Date(body.offerEndDate) : null,
-    }});
+      location: body?.location || null,
+      subCategory: body?.subCategory || null,
+    } as any});
     return NextResponse.json({ ok: true });
   } catch (err: unknown) {
-    return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: err instanceof Error ? err.message : "" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: "An error occurred" }, { status: 500 });
   }
 }

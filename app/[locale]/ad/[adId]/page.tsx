@@ -1,13 +1,18 @@
-export const dynamic = "force-dynamic";
+export const revalidate = 300; // ISR: revalidate every 5 minutes
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import ReportAd from "@/components/ReportAd";
+import ContactDisclaimer from "@/components/ContactDisclaimer";
+import { PixelViewContent } from "@/components/PixelEvents";
+import PixelLeadTracker from "@/components/PixelLeadTracker";
 import { getTranslations } from "@/lib/getTranslations";
 import type { Metadata } from "next";
 
 import { getCategories, getCatArMap, getCategoryImageMap, getCategoryImage } from "@/lib/categories";
+import { getLocationLabel, getCarBrandLabel } from "@/lib/locations-cars";
 
 interface Props { params: Promise<{ adId: string; locale: string }> }
 
@@ -57,6 +62,31 @@ export default async function AdPage({ params }: Props) {
   });
   if (!ad) notFound();
 
+  // Suspended ads: show notice instead of ad content
+  if (ad.status === "SUSPENDED") {
+    const isAr = locale === "ar";
+    return (
+      <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }} dir={isAr ? "rtl" : "ltr"}>
+        <Header />
+        <main className="max-w-4xl mx-auto px-4 py-16" style={{ textAlign: "center" }}>
+          <div style={{ backgroundColor: "var(--surface)", border: "1.5px solid var(--border)", borderRadius: "var(--radius-lg)", padding: "3rem 2rem" }}>
+            <div style={{ fontSize: "3rem", marginBottom: "1rem" }}>🚫</div>
+            <h1 style={{ color: "var(--text)", fontSize: "1.5rem", fontWeight: 800, marginBottom: "0.5rem" }}>
+              {isAr ? "تم تعليق هذا الإعلان" : "This ad has been suspended"}
+            </h1>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.9375rem", marginBottom: "1.5rem", maxWidth: 400, margin: "0 auto 1.5rem" }}>
+              {isAr ? "تم تعليق هذا الإعلان بسبب مخالفة محتملة لسياسات المنصة. إذا كنت صاحب الإعلان، يرجى التواصل معنا." : "This ad has been suspended due to a potential policy violation. If you are the ad owner, please contact us."}
+            </p>
+            <a href={`/${locale}`} style={{ color: "var(--primary)", textDecoration: "none", fontSize: "0.9375rem", fontWeight: 500 }}>
+              {isAr ? "العودة للرئيسية" : "Back to Home"} →
+            </a>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   const now = new Date();
   const expired = ad.expiresAt < now;
   const isOffer = ad.contentType === "offer";
@@ -86,12 +116,19 @@ export default async function AdPage({ params }: Props) {
     : whatsappUrl ? ["whatsapp"] : ["call"];
   const showWhatsApp  = contactMethods.some((m: string) => m === "whatsapp" || m === "both") && !!whatsappUrl;
   const showCall      = contactMethods.some((m: string) => m === "call"     || m === "both") && !!ad.contactPhone;
-  const tgUsername    = ((ad as any).telegramUsername || "").replace(/^@/, "");
-  const showTelegram  = contactMethods.includes("telegram") && !!tgUsername;
-  const telegramUrl   = showTelegram ? `https://t.me/${tgUsername}` : null;
+  // Telegram contact removed from website — Telegram is bot-only
+  const showTelegram  = false;
+  const telegramUrl: string | null   = null;
 
   const firstImg = ad.media[0];
-  const adImageUrl = firstImg ? (firstImg.url.startsWith("/") ? `https://classifiedsuae.ae${firstImg.url}` : `https://classifiedsuae.ae/uploads/${firstImg.url}`) : null;
+  const adImageUrl = firstImg ? (firstImg.url.startsWith("/") ? `https://classifiedsuae.ae${firstImg.url}` : `https://classifiedsuae.ae/uploads/${firstImg.url}`) : "https://classifiedsuae.ae/og-image.jpg";
+  const allImages = ad.media.length > 0
+    ? ad.media.map((m: any) => m.url.startsWith("/") ? `https://classifiedsuae.ae${m.url}` : `https://classifiedsuae.ae/uploads/${m.url}`)
+    : ["https://classifiedsuae.ae/og-image.jpg"];
+  const adUrl = `https://classifiedsuae.ae/${locale}/ad/${ad.id}`;
+  const catSlug = ad.category.toLowerCase().replace(/ /g, "-").replace(/&/g, "").replace(/--/g, "-");
+  const publishDate = ad.publishedAt ? new Date(ad.publishedAt).toISOString() : new Date(ad.createdAt).toISOString();
+
   const jsonLd = {
     "@context": "https://schema.org",
     "@graph": [
@@ -100,22 +137,54 @@ export default async function AdPage({ params }: Props) {
         name: ad.title || "Ad",
         description: ad.description,
         category: ad.category,
-        ...(adImageUrl && { image: adImageUrl }),
-        ...(adPrice && {
-          offers: {
-            "@type": "Offer",
-            price: adPrice,
-            priceCurrency: "AED",
-            availability: expired ? "https://schema.org/SoldOut" : "https://schema.org/InStock",
-            url: `https://classifiedsuae.ae/${locale}/ad/${ad.id}`,
+        image: allImages,
+        url: adUrl,
+        brand: {
+          "@type": "Organization",
+          name: "Classifieds UAE",
+        },
+        offers: {
+          "@type": "Offer",
+          price: adPrice || 0,
+          priceCurrency: "AED",
+          availability: expired ? "https://schema.org/SoldOut" : "https://schema.org/InStock",
+          url: adUrl,
+          priceValidUntil: ad.expiresAt ? new Date(ad.expiresAt).toISOString().split("T")[0] : undefined,
+          itemCondition: "https://schema.org/NewCondition",
+          seller: {
+            "@type": "Organization",
+            name: "Classifieds UAE",
+            url: "https://classifiedsuae.ae",
           },
-        }),
+          shippingDetails: {
+            "@type": "OfferShippingDetails",
+            shippingDestination: {
+              "@type": "DefinedRegion",
+              addressCountry: "AE",
+            },
+            deliveryTime: {
+              "@type": "ShippingDeliveryTime",
+              handlingTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 0, unitCode: "DAY" },
+              transitTime: { "@type": "QuantitativeValue", minValue: 0, maxValue: 0, unitCode: "DAY" },
+            },
+            shippingRate: {
+              "@type": "MonetaryAmount",
+              value: 0,
+              currency: "AED",
+            },
+          },
+          hasMerchantReturnPolicy: {
+            "@type": "MerchantReturnPolicy",
+            applicableCountry: "AE",
+            returnPolicyCategory: "https://schema.org/MerchantReturnNotPermitted",
+          },
+        },
       },
       {
         "@type": "BreadcrumbList",
         itemListElement: [
           { "@type": "ListItem", position: 1, name: locale === "ar" ? "الرئيسية" : "Home", item: `https://classifiedsuae.ae/${locale}` },
-          { "@type": "ListItem", position: 2, name: ad.category, item: `https://classifiedsuae.ae/${locale}/category/${ad.category.toLowerCase().replace(/ /g, "-").replace(/&/g, "")}` },
+          { "@type": "ListItem", position: 2, name: ad.category, item: `https://classifiedsuae.ae/${locale}/category/${catSlug}` },
           { "@type": "ListItem", position: 3, name: ad.title || "Ad" },
         ],
       },
@@ -124,6 +193,8 @@ export default async function AdPage({ params }: Props) {
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }} dir={locale === "ar" ? "rtl" : "ltr"}>
+      <PixelViewContent contentName={ad.title || "Ad"} contentCategory={ad.category} value={adPrice} />
+      <PixelLeadTracker adTitle={ad.title || "Ad"} />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
       <Header />
       <main className="max-w-4xl mx-auto px-4 py-8" style={{ textAlign: locale === "ar" ? "right" : "left" }}>
@@ -140,7 +211,20 @@ export default async function AdPage({ params }: Props) {
             </div>
 
             <h1 style={{ color: "var(--text)", fontSize: "1.75rem", fontWeight: 800, marginBottom: "0.375rem", lineHeight: 1.25 }}>{ad.title || t("untitled")}</h1>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.875rem", marginBottom: showPrice ? "0.875rem" : "1.5rem", textTransform: "capitalize" }}>{t("category")}: {locale === "ar" ? (CAT_AR[ad.category.toLowerCase().replace(/ /g,"-")] || ad.category) : ad.category}</p>
+            <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", gap: "0.5rem", marginBottom: showPrice ? "0.875rem" : "1.5rem" }}>
+              <span style={{ color: "var(--text-muted)", fontSize: "0.875rem", textTransform: "capitalize" }}>{t("category")}: {locale === "ar" ? (CAT_AR[ad.category.toLowerCase().replace(/ /g,"-").replace(/&/g,"").replace(/--/g,"-")] || ad.category) : ad.category}</span>
+              {(ad as any).subCategory && (
+                <span style={{ fontSize: "0.75rem", fontWeight: 600, padding: "0.2rem 0.625rem", borderRadius: 999, backgroundColor: "color-mix(in srgb, var(--text-muted) 10%, var(--surface))", color: "var(--text-muted)", border: "1px solid var(--border)" }}>
+                  {getCarBrandLabel((ad as any).subCategory, locale)}
+                </span>
+              )}
+              {(ad as any).location && (
+                <span style={{ fontSize: "0.75rem", fontWeight: 600, padding: "0.2rem 0.625rem", borderRadius: 999, backgroundColor: "color-mix(in srgb, var(--primary) 8%, var(--surface))", color: "var(--primary)", border: "1px solid color-mix(in srgb, var(--primary) 20%, var(--border))", display: "inline-flex", alignItems: "center", gap: "0.25rem" }}>
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                  {getLocationLabel((ad as any).location, locale)}
+                </span>
+              )}
+            </div>
 
             {showPrice && (
               <div style={{ display: "inline-flex", alignItems: "center", gap: "0.5rem", backgroundColor: "color-mix(in srgb, var(--primary) 10%, var(--surface))", border: "1.5px solid color-mix(in srgb, var(--primary) 25%, transparent)", borderRadius: "var(--radius-md)", padding: "0.5rem 1.25rem", marginBottom: "1.5rem" }}>
@@ -225,12 +309,18 @@ export default async function AdPage({ params }: Props) {
           </div>
         </div>
 
+        <div style={{ marginTop: "1.25rem", display: "flex", justifyContent: "center" }}>
+          <ReportAd adId={ad.id} locale={locale} />
+        </div>
+
         <div style={{ marginTop: "1.5rem", textAlign: "center" }}>
           <Link href={`/${locale}`} style={{ color: "var(--primary)", textDecoration: "none", fontSize: "0.9375rem", fontWeight: 500 }}>{t("backToListings")}</Link>
         </div>
       </main>
       <Footer />
-      <script dangerouslySetInnerHTML={{ __html: "document.querySelectorAll('[data-track]').forEach(el=>{el.addEventListener('click',()=>{const id=el.getAttribute('data-ad-id');const t=el.getAttribute('data-track');if(!id||!t)return;fetch('/api/ads/'+id+'/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:t})}).catch(()=>{});});});" }} />
+      {/* Safety disclaimer modal — intercepts call/whatsapp/telegram/booking taps. */}
+      <ContactDisclaimer locale={locale} />
+      <script dangerouslySetInnerHTML={{ __html: "document.querySelectorAll('[data-track]').forEach(el=>{el.addEventListener('click',()=>{const id=el.getAttribute('data-ad-id');const t=el.getAttribute('data-track');if(!id||!t)return;if(['call','whatsapp','telegram','booking'].includes(t))return;fetch('/api/ads/'+id+'/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:t})}).catch(()=>{});});});" }} />
     </div>
   );
 }

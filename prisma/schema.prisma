@@ -9,19 +9,21 @@ datasource db {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  phone     String?  @unique
-  email     String?  @unique
-  name      String?
-  password  String?
-  role      UserRole @default(USER)
-  provider  String?
+  id       String   @id @default(cuid())
+  phone    String?  @unique
+  email    String?  @unique
+  username String?  @unique
+  name     String?
+  password String?
+  role     UserRole @default(USER)
+  userType UserType @default(PERSONAL)
+  provider String?
 
   otpCode       String?
   otpExpiresAt  DateTime?
-  otpAttempts   Int      @default(0)
-  phoneVerified Boolean  @default(false)
-  emailVerified Boolean  @default(false)
+  otpAttempts   Int       @default(0)
+  phoneVerified Boolean   @default(false)
+  emailVerified Boolean   @default(false)
 
   // 2FA (TOTP) — for admin accounts
   twoFactorSecret  String?
@@ -35,9 +37,11 @@ model User {
 
   submissions AdSubmission[]
   audits      AuditLog[]
+  company     Company?
 
   @@index([phone])
   @@index([email])
+  @@index([username])
 }
 
 model Category {
@@ -86,21 +90,23 @@ model Package {
 }
 
 model AdSubmission {
-  id             String    @id @default(cuid())
-  phone          String
-  language       String?
-  categoryId     String?
-  category       Category? @relation(fields: [categoryId], references: [id])
-  categoryName   String?
-  text           String?
-  title          String?
-  contactPhone   String?
-  whatsappNumber String?
+  id               String    @id @default(cuid())
+  phone            String
+  language         String?
+  categoryId       String?
+  category         Category? @relation(fields: [categoryId], references: [id])
+  categoryName     String?
+  text             String?
+  title            String?
+  contactPhone     String?
+  whatsappNumber   String?
   telegramChatId   String?
   telegramUsername String?
   contactEmail     String?
   contactMethod    String?
   contentType      String    @default("ad")
+  location         String?
+  subCategory      String?
 
   offerStartDate DateTime?
   offerEndDate   DateTime?
@@ -117,8 +123,15 @@ model AdSubmission {
   packageId String?
   package   Package? @relation(fields: [packageId], references: [id])
 
+  companyId String?
+  company   Company? @relation(fields: [companyId], references: [id], onDelete: SetNull)
+
   status        SubmissionStatus @default(DRAFT)
   publishTarget String           @default("website")
+  /**
+   * Origin channel — used by the payment webhook to know whom to DM with links.
+   */
+  source        String? // "web" | "telegram" | "whatsapp"
 
   userId String?
   user   User?   @relation(fields: [userId], references: [id])
@@ -159,11 +172,13 @@ model Ad {
   telegramUsername String?
   contactEmail     String?
   contactMethod    String?
+  location         String?
+  subCategory      String?
 
   isFeatured Boolean @default(false)
   isPinned   Boolean @default(false)
 
-  status      AdStatus @default(PENDING)
+  status      AdStatus  @default(PENDING)
   expiresAt   DateTime
   publishedAt DateTime?
 
@@ -225,13 +240,18 @@ model SubmissionMedia {
 model Payment {
   id String @id @default(cuid())
 
-  submissionId String       @unique
-  submission   AdSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  submissionId String?       @unique
+  submission   AdSubmission? @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
-  provider    String
-  amount      Float
-  currency    String
-  status      PaymentStatus
+  // Company subscription payment (mutually exclusive with submissionId)
+  companyId String?
+  company   Company?       @relation(fields: [companyId], references: [id], onDelete: SetNull)
+  purpose   PaymentPurpose @default(AD_PAYMENT)
+
+  provider String
+  amount   Float
+  currency String
+  status   PaymentStatus
 
   providerRef String @unique
   rawPayload  Json?
@@ -239,10 +259,11 @@ model Payment {
   createdAt DateTime @default(now())
 
   @@index([providerRef])
+  @@index([companyId])
 }
 
 model PricingConfig {
-  id             String  @id @default(cuid())
+  id             String @id @default(cuid())
   textPrice      Int
   imagePrice     Int
   adDurationDays Int
@@ -275,6 +296,60 @@ model OtpRequest {
   @@index([phone])
 }
 
+model AdReport {
+  id            String    @id @default(cuid())
+  adId          String
+  adTitle       String?
+  adUrl         String
+  reporterName  String?
+  reporterEmail String?
+  reporterPhone String?
+  reason        String
+  details       String?
+  status        String    @default("PENDING")
+  createdAt     DateTime  @default(now())
+  reviewedAt    DateTime?
+  reviewedBy    String?
+
+  @@index([adId])
+  @@index([status])
+  @@index([createdAt(sort: Desc)])
+}
+
+model BlogArticle {
+  id              String   @id @default(cuid())
+  slug            String   @unique
+  language        String // "ar" | "en"
+  /**
+   * Shared identifier across language pairs of the same topic.
+   */
+  topicSlug       String?
+  title           String
+  metaTitle       String
+  metaDescription String
+  keywords        String[]
+  excerpt         String?
+  content         String // markdown
+  coverImageUrl   String?
+  /**
+   * Provenance of the article — "AI" or "MANUAL".
+   */
+  source          String   @default("AI")
+  /**
+   * "PUBLISHED" or "DRAFT". Drafts hidden from public listing.
+   */
+  status          String   @default("PUBLISHED")
+  publishDate     DateTime @default(now())
+  viewsCount      Int      @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([language, status])
+  @@index([publishDate(sort: Desc)])
+  @@index([topicSlug])
+}
+
 model PromoLog {
   id           String   @id @default(cuid())
   platform     String
@@ -291,8 +366,8 @@ model PromoLog {
 model AuditLog {
   id String @id @default(cuid())
 
-  userId    String?
-  actor     String
+  userId String?
+  actor  String
 
   action   String
   entity   String
@@ -323,6 +398,7 @@ enum AdStatus {
   APPROVED
   REJECTED
   PUBLISHED
+  SUSPENDED
   EXPIRED
 }
 
@@ -338,4 +414,80 @@ enum UserRole {
   ADMIN
   CONTENT_ADMIN
   SUPERVISOR
+}
+
+enum UserType {
+  PERSONAL
+  COMPANY
+}
+
+enum PaymentPurpose {
+  AD_PAYMENT
+  COMPANY_SUBSCRIPTION
+}
+
+enum CompanySubscriptionStatus {
+  PENDING_OTP
+  PENDING_PAYMENT
+  ACTIVE
+  EXPIRED
+  CANCELLED
+}
+
+model CompanyPlan {
+  id            String  @id @default(cuid())
+  slug          String  @unique
+  name          String  @unique
+  nameAr        String
+  description   String?
+  descriptionAr String?
+
+  price        Float
+  currency     String @default("AED")
+  billingCycle String @default("MONTHLY")
+
+  maxActivities Int     @default(1)
+  maxAdChars    Int
+  maxAdImages   Int
+  unlimitedAds  Boolean @default(true)
+
+  isActive  Boolean @default(true)
+  sortOrder Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  companies Company[]
+}
+
+model Company {
+  id String @id @default(cuid())
+
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  tradeLicenseName    String
+  tradeLicenseUrl     String
+  companyPhone        String
+  authorizedSignatory String
+  activity            String
+
+  username String @unique
+
+  planId String?
+  plan   CompanyPlan? @relation(fields: [planId], references: [id])
+
+  subscriptionStatus    CompanySubscriptionStatus @default(PENDING_OTP)
+  subscriptionStartedAt DateTime?
+  subscriptionEndsAt    DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  payments    Payment[]
+  submissions AdSubmission[]
+
+  @@index([username])
+  @@index([subscriptionStatus])
+  @@index([companyPhone])
 }

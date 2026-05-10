@@ -2,9 +2,14 @@ import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import { getTranslations } from "@/lib/getTranslations";
+import { isPastMay1 } from "@/lib/plan-config";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Terms of Service | CLASSIFIEDS UAE" };
+export const metadata: Metadata = {
+  title: "Terms of Service | Classifieds UAE",
+  description: "Terms and conditions for using Classifieds UAE classified ads platform.",
+  robots: { index: false, follow: true },
+};
 
 const h2Style = { color: "var(--text)", fontWeight: 700 as const, fontSize: "1.0625rem", marginBottom: "0.625rem", marginTop: "2rem", paddingBottom: "0.375rem", borderBottom: "1px solid var(--border)" };
 const pStyle = { marginBottom: "0.875rem" };
@@ -61,13 +66,15 @@ export default async function TermsPage({ params }: Props) {
                 <li><a href="https://classifiedsuae.ae" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>موقع CLASSIFIEDS UAE (classifiedsuae.ae)</a></li>
                 <li><a href="https://facebook.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>صفحة فيسبوك الرسمية لCLASSIFIEDS UAE</a></li>
                 <li><a href="https://instagram.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>حساب إنستغرام الرسمي لCLASSIFIEDS UAE</a></li>
-                <li><a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>قناة واتساب الرسمية لCLASSIFIEDS UAE</a></li>
+                <li><a href="https://www.youtube.com/@classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>قناة يوتيوب الرسمية لCLASSIFIEDS UAE</a></li>
+                <li><a href="https://classifiedsuae.ae/WhatsApp/channel/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>قناة واتساب الرسمية لCLASSIFIEDS UAE</a></li>
                 <li><a href="https://t.me/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>قناة تيليغرام الرسمية لCLASSIFIEDS UAE</a></li>
               </> : <>
                 <li><a href="https://classifiedsuae.ae" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>CLASSIFIEDS UAE website (classifiedsuae.ae)</a></li>
                 <li><a href="https://facebook.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official CLASSIFIEDS UAE Facebook Page</a></li>
                 <li><a href="https://instagram.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official CLASSIFIEDS UAE Instagram Account</a></li>
-                <li><a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official CLASSIFIEDS UAE WhatsApp Channel</a></li>
+                <li><a href="https://www.youtube.com/@classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official CLASSIFIEDS UAE YouTube Channel</a></li>
+                <li><a href="https://classifiedsuae.ae/WhatsApp/channel/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official CLASSIFIEDS UAE WhatsApp Channel</a></li>
                 <li><a href="https://t.me/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official CLASSIFIEDS UAE Telegram Channel</a></li>
               </>}
             </ul>
@@ -148,6 +155,15 @@ export default async function TermsPage({ params }: Props) {
               : "CLASSIFIEDS UAE bears zero legal responsibility for any prohibited content posted by users. The advertiser alone is subject to UAE legal consequences for violations."
             }</div>
 
+            {/* 4.3 — Counterfeit products explicit clause */}
+            <h3 style={{ color: "var(--text)", fontWeight: 600, marginBottom: "0.5rem", marginTop: "1rem", fontSize: "0.9375rem" }}>
+              {isAr ? "4.3 المنتجات المقلدة" : "4.3 Counterfeit Products"}
+            </h3>
+            <div style={warningStyle}>{isAr
+              ? "ممنوع منعاً باتاً وقطعياً الترويج لأي منتجات مقلدة، والمُعلن يتحمل كافة المسؤولية القانونية بكافة أشكالها عند الجهات المختصة، وكذلك العطل والضرر الذي قد ينجم عن نشره لمنتجات مقلدة وغير أصلية."
+              : "It is strictly and absolutely prohibited to promote any counterfeit products. The advertiser bears all forms of legal responsibility before the competent authorities, in addition to any damages or harm that may arise from publishing counterfeit or non-original products."
+            }</div>
+
             {/* 5 */}
             <h2 style={h2Style}>{isAr ? "5. مسؤوليات المعلن" : "5. Advertiser Responsibilities"}</h2>
             <p style={pStyle}>{isAr ? "بنشر إعلان، فإنك تؤكد وتضمن قانونياً أنك:" : "By posting an ad, you confirm and legally warrant that:"}</p>
@@ -185,13 +201,13 @@ export default async function TermsPage({ params }: Props) {
                   {isAr ? <>
                     <tr><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>مجاني</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>0 د.إ</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>3 أيام</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>150 حرف، صورة واحدة</td></tr>
                     <tr style={{ backgroundColor: "var(--surface-2)" }}><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>أساسي</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>5 د.إ</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>7 أيام</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>400 حرف، صورتين</td></tr>
-                    <tr><td style={{ padding: "0.75rem", border: "1px solid var(--border)", fontWeight: 700 }}>🇦🇪 علم الإمارات</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)", fontWeight: 700, color: "#D4AF37" }}>مجاني حتى 1 مايو</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>14 يوماً</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>800 حرف، 4 صور (عرض الإطلاق)</td></tr>
+                    {!isPastMay1() && <tr><td style={{ padding: "0.75rem", border: "1px solid var(--border)", fontWeight: 700 }}>🇦🇪 علم الإمارات</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)", fontWeight: 700, color: "#D4AF37" }}>مجاني حتى 1 مايو</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>14 يوماً</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>800 حرف، 4 صور (عرض الإطلاق)</td></tr>}
                     <tr style={{ backgroundColor: "var(--surface-2)" }}><td style={{ padding: "0.75rem", border: "1px solid var(--border)", fontWeight: 700, color: "var(--text)" }}>قياسي</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)", fontWeight: 700, color: "var(--primary)" }}>9 د.إ</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>14 يوماً</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>800 حرف، 4 صور (الأفضل قيمة)</td></tr>
                     <tr><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>بريميوم</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>15 د.إ</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>30 يوماً</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>1200 حرف، 6 صور</td></tr>
                   </> : <>
                     <tr><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>Free</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>0 AED</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>3 days</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>150 chars, 1 image</td></tr>
                     <tr style={{ backgroundColor: "var(--surface-2)" }}><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>Basic</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>5 AED</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>7 days</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>400 chars, 2 images</td></tr>
-                    <tr><td style={{ padding: "0.75rem", border: "1px solid var(--border)", fontWeight: 700 }}>🇦🇪 UAE Flag</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)", fontWeight: 700, color: "#D4AF37" }}>FREE until May 1st</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>14 days</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>800 chars, 4 images (Launch Offer)</td></tr>
+                    {!isPastMay1() && <tr><td style={{ padding: "0.75rem", border: "1px solid var(--border)", fontWeight: 700 }}>🇦🇪 UAE Flag</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)", fontWeight: 700, color: "#D4AF37" }}>FREE until May 1st</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>14 days</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>800 chars, 4 images (Launch Offer)</td></tr>}
                     <tr style={{ backgroundColor: "var(--surface-2)" }}><td style={{ padding: "0.75rem", border: "1px solid var(--border)", fontWeight: 700, color: "var(--text)" }}>Standard</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)", fontWeight: 700, color: "var(--primary)" }}>9 AED</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>14 days</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>800 chars, 4 images (Best Value)</td></tr>
                     <tr><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>Premium</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>15 AED</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>30 days</td><td style={{ padding: "0.75rem", border: "1px solid var(--border)" }}>1200 chars, 6 images</td></tr>
                   </>}
@@ -268,14 +284,14 @@ export default async function TermsPage({ params }: Props) {
                 <li>{isAr ? "فيسبوك" : "Facebook"}: <a href="https://facebook.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
                 <li>{isAr ? "إنستغرام" : "Instagram"}: <a href="https://instagram.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
                 <li>{isAr ? "تيليغرام" : "Telegram"}: <a href="https://t.me/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>{isAr ? "القناة الرسمية" : "Official Channel"}</a></li>
-                <li>{isAr ? "واتساب" : "WhatsApp"}: <a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>{isAr ? "القناة الرسمية" : "Official Channel"}</a></li>
+                <li>{isAr ? "واتساب" : "WhatsApp"}: <a href="https://classifiedsuae.ae/WhatsApp/channel/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>{isAr ? "القناة الرسمية" : "Official Channel"}</a></li>
               </> : <>
                 <li>Website: <a href="https://classifiedsuae.ae" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuae.ae</a></li>
                 <li>Email: <a href="mailto:info@classifiedsuae.ae" style={{ color: "var(--primary)", textDecoration: "none" }}>info@classifiedsuae.ae</a></li>
                 <li>Facebook: <a href="https://facebook.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
                 <li>Instagram: <a href="https://instagram.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
                 <li>Telegram: <a href="https://t.me/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official Channel</a></li>
-                <li>WhatsApp: <a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official Channel</a></li>
+                <li>WhatsApp: <a href="https://classifiedsuae.ae/WhatsApp/channel/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official Channel</a></li>
               </>}
             </ul>
 

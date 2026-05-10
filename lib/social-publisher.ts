@@ -35,14 +35,30 @@ export interface SocialPostOptions {
 
 /**
  * Returns a publicly-accessible fallback image URL for social posts that have no user image.
- * Tries the dynamic OG route first; falls back to a static /og-image.jpg that always works.
+ *
+ * Priority:
+ *   1. Static branded 1080×1080 default (`/default-ad-image.jpg`) — Instagram-
+ *      friendly square aspect, full brand logo. This is what users expect to
+ *      see when they don't upload an image.
+ *   2. Dynamic per-ad OG image (`/api/og`) — kept as a last-resort if the
+ *      static asset is somehow missing.
+ *   3. Legacy `/og-image.jpg` (1200×630) — final fallback.
  */
 async function getFallbackImageUrl(opts: SocialPostOptions): Promise<string | null> {
   const APP_URL = process.env.APP_URL || "https://classifiedsuae.ae";
+
+  // Branded square default — the right shape for Instagram, properly branded.
+  const staticBranded = `${APP_URL}/default-ad-image.jpg`;
+  try {
+    const head = await fetch(staticBranded, { method: "HEAD" });
+    if (head.ok) return staticBranded;
+  } catch {
+    // fall through to dynamic OG
+  }
+
+  // Dynamic per-ad OG (last-resort if the static asset disappeared).
   const params = new URLSearchParams({ title: opts.title, category: opts.category });
   if (opts.adPrice) params.set("price", String(opts.adPrice));
-
-  // Try dynamic OG first (branded per-ad image)
   try {
     const res = await fetch(`${APP_URL}/api/og?${params.toString()}`);
     if (res.ok) {
@@ -55,12 +71,11 @@ async function getFallbackImageUrl(opts: SocialPostOptions): Promise<string | nu
       console.log("OG image generated:", filename);
       return `${APP_URL}/uploads/${filename}`;
     }
-    console.warn("Dynamic OG failed (status " + res.status + "), using static fallback");
+    console.warn("Dynamic OG failed (status " + res.status + "), using legacy fallback");
   } catch (e) {
-    console.warn("Dynamic OG error, using static fallback:", e instanceof Error ? e.message : e);
+    console.warn("Dynamic OG error, using legacy fallback:", e instanceof Error ? e.message : e);
   }
 
-  // Static fallback — always works
   return `${APP_URL}/og-image.jpg`;
 }
 
@@ -74,17 +89,22 @@ export interface SocialPublishResult {
 }
 
 function buildCaption(opts: SocialPostOptions, platform: SocialPlatform = "facebook"): string {
+  // Captions are emoji-free per product spec — ads must look clean across
+  // Instagram / Facebook / X. Bot UI, welcome screens, and status DMs are NOT
+  // touched (they're not "ads"). Plain labels replace prior emoji prefixes.
   const lines: string[] = [];
-  lines.push(`📢 ${opts.title}`);
+  if (opts.title) {
+    lines.push(opts.title);
+  }
 
-  if (!opts.hideCategory) {
-    lines.push(`🗂 ${opts.category}`);
+  if (!opts.hideCategory && opts.category) {
+    lines.push(opts.category);
   }
 
   if (opts.adPrice) {
-    lines.push(`💰 ${Number(opts.adPrice).toLocaleString("en-AE")} AED${opts.isNegotiable ? " · Negotiable" : ""}`);
+    lines.push(`${Number(opts.adPrice).toLocaleString("en-AE")} AED${opts.isNegotiable ? " · Negotiable" : ""}`);
   } else if (opts.isNegotiable) {
-    lines.push(`💰 Price: Negotiable`);
+    lines.push(`Price: Negotiable`);
   }
 
   // Description — platform-appropriate cap. IG = 2200, FB = ~60k (use 5000 default), X handled separately.
@@ -97,7 +117,7 @@ function buildCaption(opts: SocialPostOptions, platform: SocialPlatform = "faceb
     lines.push(`\n${opts.contactLines.join("\n")}`);
   }
 
-  lines.push(`\n🔗 ${opts.adUrl}`);
+  lines.push(`\n${opts.adUrl}`);
 
   // Hashtags — auto-append unless caller opts out.
   if (!opts.skipHashtags) {
@@ -421,16 +441,17 @@ async function postToX(opts: SocialPostOptions): Promise<{ url: string | null; p
     return { url: null, postId: null };
   }
 
-  const priceStr = opts.adPrice ? `💰 ${Number(opts.adPrice).toLocaleString("en-AE")} AED${opts.isNegotiable ? " · Negotiable" : ""}` : opts.isNegotiable ? `💰 Negotiable` : "";
-  const hashtags = buildHashtags(opts.category, "x");
+  // Captions are emoji-free per spec.
+  const priceStr = opts.adPrice ? `${Number(opts.adPrice).toLocaleString("en-AE")} AED${opts.isNegotiable ? " · Negotiable" : ""}` : opts.isNegotiable ? `Negotiable` : "";
+  const hashtags = opts.skipHashtags ? "" : buildHashtags(opts.category, "x");
 
-  // Build the FULL ideal tweet (title + category + price + full description + link + hashtags)
+  // Build tweet — if title is empty (promo posts), use description directly
   const fullParts = [
-    `📢 ${opts.title}`,
-    `🗂 ${opts.category}`,
+    opts.title ? opts.title : "",
+    (!opts.hideCategory && opts.category && opts.category !== "Classifieds UAE") ? opts.category : "",
     priceStr,
     opts.description || "",
-    `🔗 ${opts.adUrl}`,
+    opts.title ? opts.adUrl : "", // promo posts already include URL in description
     hashtags,
   ].filter(Boolean);
   const fullTweet = fullParts.join("\n");
@@ -458,12 +479,13 @@ async function postToX(opts: SocialPostOptions): Promise<{ url: string | null; p
 
   // ── Thread mode: first tweet = teaser, reply = full text ─────────────────
   // Teaser: title + category + price + link + hashtags (skip description)
+  // Emoji-free per spec.
   const teaserParts = [
-    `📢 ${opts.title}`,
-    `🗂 ${opts.category}`,
+    opts.title,
+    opts.category,
     priceStr,
-    `🧵 Full details below ↓`,
-    `🔗 ${opts.adUrl}`,
+    `Full details below`,
+    opts.adUrl,
     hashtags,
   ].filter(Boolean);
   let teaser = teaserParts.join("\n");
@@ -472,11 +494,11 @@ async function postToX(opts: SocialPostOptions): Promise<{ url: string | null; p
     const overshoot = measureTweet(teaser) - X_MAX + 4;
     const shorterTitle = [...opts.title].slice(0, Math.max(10, [...opts.title].length - overshoot)).join("").trim() + "...";
     teaser = [
-      `📢 ${shorterTitle}`,
-      `🗂 ${opts.category}`,
+      shorterTitle,
+      opts.category,
       priceStr,
-      `🧵 Full details below ↓`,
-      `🔗 ${opts.adUrl}`,
+      `Full details below`,
+      opts.adUrl,
       hashtags,
     ].filter(Boolean).join("\n");
   }

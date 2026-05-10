@@ -6,9 +6,9 @@ import { runScheduledPromos } from "@/lib/promo-publisher";
 
 /**
  * Manual test endpoint — publishes to one platform (or all) immediately,
- * bypassing schedule and 20h cooldown. Admin only.
+ * bypassing schedule and cooldown. Admin only.
  *
- * POST body: { platform?: "facebook" | "instagram" | "x" | "telegram" | "all" }
+ * POST body: { platform?: "facebook" | "instagram" | "telegram" | "all" }
  */
 export async function POST(req: NextRequest) {
   const auth = await requireAdmin(req, { minRole: "ADMIN" });
@@ -22,7 +22,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ ok: true, mode: "all", results });
   }
 
-  const validPlatforms: PromoPlatform[] = ["facebook", "instagram", "x", "telegram"];
+  const validPlatforms: PromoPlatform[] = ["facebook", "instagram", "telegram"];
   if (!validPlatforms.includes(platform as PromoPlatform)) {
     return NextResponse.json({ ok: false, error: "INVALID_PLATFORM", valid: validPlatforms }, { status: 400 });
   }

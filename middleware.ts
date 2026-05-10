@@ -7,7 +7,7 @@ const rateLimiter = new RateLimiterMemory({ points: 100, duration: 60 });
 const adminLimiter = new RateLimiterMemory({ points: 20, duration: 60 });
 
 const locales = ["en", "ar"];
-const defaultLocale = "ar";
+const defaultLocale = "en";
 
 function getLocale(req: NextRequest): string {
   // 1. Check cookie (user's explicit choice)
@@ -37,10 +37,11 @@ export async function middleware(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Skip static files and Next.js internals
+  // Skip static files, Next.js internals, and branded redirects
   if (
     pathname.startsWith("/_next") ||
     pathname.startsWith("/uploads") ||
+    pathname.startsWith("/WhatsApp") ||
     pathname.includes(".") ||
     pathname.startsWith("/admin")
   ) {

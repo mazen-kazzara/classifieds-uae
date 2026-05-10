@@ -15,6 +15,7 @@ const NAV = [
   { href: "/admin/categories", labelEn: "Categories", labelAr: "الفئات" },
   { href: "/admin/packages", labelEn: "Packages", labelAr: "الباقات" },
   { href: "/admin/pricing", labelEn: "Pricing", labelAr: "التسعير" },
+  { href: "/admin/reports", labelEn: "Reports", labelAr: "البلاغات" },
   { href: "/admin/audit", labelEn: "Audit Log", labelAr: "سجل العمليات" },
   { href: "/admin/2fa", labelEn: "2FA Security", labelAr: "المصادقة الثنائية" },
 ];

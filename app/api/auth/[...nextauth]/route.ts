@@ -80,8 +80,15 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.phone || !credentials?.otpToken) return null;
-        if (credentials.otpToken !== "verified") return null;
         const phone = credentials.phone.replace(/[\s+\-()]/g, "");
+        // Verify OTP against database — reject if no valid unexpired OTP found
+        const otpRecord = await prisma.otpRequest.findFirst({
+          where: { phone, code: credentials.otpToken, used: false, expiresAt: { gt: new Date() } },
+          orderBy: { createdAt: "desc" },
+        });
+        if (!otpRecord) return null;
+        // Mark OTP as used (one-time)
+        await prisma.otpRequest.update({ where: { id: otpRecord.id }, data: { used: true } });
         const user = await prisma.user.findUnique({ where: { phone } });
         if (!user) return null;
         return { id: user.id, phone: user.phone, email: user.email, role: user.role ?? "USER" };
@@ -108,8 +115,28 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: "jwt",
-    maxAge: 24 * 60 * 60, // 24h hard max (idle timeout enforced separately by requireAdmin)
-    updateAge: 5 * 60,    // refresh token every 5 min of activity
+    maxAge: 24 * 60 * 60,
+    updateAge: 5 * 60,
+  },
+  cookies: {
+    sessionToken: {
+      name: "__Secure-next-auth.session-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true,
+      },
+    },
+    csrfToken: {
+      name: "__Host-next-auth.csrf-token",
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: true,
+      },
+    },
   },
   pages: { signIn: "/admin/login" },
   callbacks: {

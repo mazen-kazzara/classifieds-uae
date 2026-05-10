@@ -5,7 +5,7 @@
  * - X gets a trimmed set due to the 280-char limit; FB/IG get the full set.
  */
 
-const CONSTANT_HASHTAGS = ["#classifiedsuae", "#UAE_Ads", "#Classifieds_Ads", "#Classifieds", "#ForSale", "#UAESale"];
+const CONSTANT_HASHTAGS = ["#classified", "#classifiedsuae", "#UAE_Ads", "#Classifieds_Ads", "#Classifieds", "#ForSale", "#UAESale"];
 
 const CATEGORY_HASHTAGS: Record<string, string[]> = {
   cars:                 ["#Cars", "#Car", "#UAECars", "#CarsForSale", "#سيارات"],
@@ -22,6 +22,8 @@ const CATEGORY_HASHTAGS: Record<string, string[]> = {
   clinics:              ["#Clinic", "#Health", "#Medical", "#Healthcare", "#عيادات"],
   pets:                 ["#Pets", "#PetsOfUAE", "#Animals", "#حيوانات_أليفة"],
   "equipment-tools":    ["#Tools", "#Equipment", "#معدات"],
+  "jewelry-accessories": ["#Jewelry", "#Accessories", "#Gold", "#مجوهرات", "#اكسسوارات"],
+  watches:              ["#Watches", "#Watch", "#LuxuryWatches", "#ساعات"],
   others:               ["#Classifieds", "#ForSale", "#UAESale"],
 };
 
@@ -56,6 +58,8 @@ function categoryToSlug(category: string): string {
   if (/clinic|medical|health|doctor|dental/.test(raw)) return "clinics";
   if (/pet|animal|dog|cat/.test(raw))                return "pets";
   if (/tool|equipment/.test(raw))                    return "equipment-tools";
+  if (/jewel|accessor|gold|necklace|ring|bracelet/.test(raw)) return "jewelry-accessories";
+  if (/watch|rolex|casio|ساعات/.test(raw))           return "watches";
   if (/service/.test(raw))                           return "services";
 
   // Arabic keyword matching
@@ -72,6 +76,8 @@ function categoryToSlug(category: string): string {
   if (/عيادات|عيادة|طبيب|صحة/.test(category))     return "clinics";
   if (/حيوان|أليف/.test(category))               return "pets";
   if (/معدات|أدوات|ادوات/.test(category))         return "equipment-tools";
+  if (/مجوهرات|إكسسوار|اكسسوار|ذهب/.test(category)) return "jewelry-accessories";
+  if (/ساعات|ساعة/.test(category))               return "watches";
   if (/خدمات|خدمة/.test(category))               return "services";
 
   return "others";

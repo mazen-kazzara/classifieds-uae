@@ -73,8 +73,10 @@ export async function POST(req: Request) {
     }
 
     // ── PAID REPUBLISH: create Ziina payment intent ──────────────────────────
-    // Mark payment with isRepublish=true in rawPayload so the webhook knows to
-    // REVIVE the existing ad instead of creating a new one.
+    // Delete any existing payment for this submission (from original purchase or failed republish)
+    // since Payment.submissionId is unique.
+    await prisma.payment.deleteMany({ where: { submissionId: submission.id } });
+
     const provisionalRef = `REPUB_${randomUUID()}`;
     const payment = await prisma.payment.create({
       data: {
@@ -129,6 +131,6 @@ export async function POST(req: Request) {
     });
   } catch (err: unknown) {
     console.error("republish-confirm error:", err);
-    return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: err instanceof Error ? err.message : "" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: "An error occurred" }, { status: 500 });
   }
 }

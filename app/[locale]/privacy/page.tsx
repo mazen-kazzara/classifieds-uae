@@ -3,7 +3,11 @@ import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "Privacy Policy | CLASSIFIEDS UAE" };
+export const metadata: Metadata = {
+  title: "Privacy Policy | Classifieds UAE",
+  description: "Privacy policy for Classifieds UAE classified ads platform.",
+  robots: { index: false, follow: true },
+};
 
 const h2Style = { color: "var(--text)", fontWeight: 700 as const, fontSize: "1.0625rem", marginBottom: "0.625rem", marginTop: "2rem", paddingBottom: "0.375rem", borderBottom: "1px solid var(--border)" };
 const h3Style = { color: "var(--text)", fontWeight: 600 as const, fontSize: "0.9375rem", marginBottom: "0.5rem", marginTop: "1rem" };
@@ -203,14 +207,14 @@ export default async function PrivacyPage({ params }: Props) {
                 <li>فيسبوك: <a href="https://facebook.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
                 <li>إنستغرام: <a href="https://instagram.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
                 <li>تيليغرام: <a href="https://t.me/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>القناة الرسمية</a></li>
-                <li>واتساب: <a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>القناة الرسمية</a></li>
+                <li>واتساب: <a href="https://classifiedsuae.ae/WhatsApp/channel/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>القناة الرسمية</a></li>
               </> : <>
                 <li>Website: <a href="https://classifiedsuae.ae" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuae.ae</a></li>
                 <li>Email: <a href="mailto:info@classifiedsuae.ae" style={{ color: "var(--primary)", textDecoration: "none" }}>info@classifiedsuae.ae</a></li>
                 <li>Facebook: <a href="https://facebook.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
                 <li>Instagram: <a href="https://instagram.com/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>classifiedsuaeofficial</a></li>
                 <li>Telegram: <a href="https://t.me/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official Channel</a></li>
-                <li>WhatsApp: <a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official Channel</a></li>
+                <li>WhatsApp: <a href="https://classifiedsuae.ae/WhatsApp/channel/classifiedsuaeofficial" target="_blank" style={{ color: "var(--primary)", textDecoration: "none" }}>Official Channel</a></li>
               </>}
             </ul>
             <p style={pStyle}>{isAr

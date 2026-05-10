@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { generateAdId } from "@/lib/ad-id";
 import { publishToSocial } from "@/lib/social-publisher";
+import { applyWatermark } from "@/lib/image-watermark";
 import fs from "fs";
 import path from "path";
 
@@ -43,7 +44,10 @@ async function downloadTelegramFile(fileId: string): Promise<string | null> {
     }
 
     const uploadPath = path.join(uploadDir, fileName);
-    fs.writeFileSync(uploadPath, Buffer.from(buffer));
+    // Telegram delivers JPEG by default for photos. Watermark before saving;
+    // applyWatermark falls back to the original buffer on any failure.
+    const watermarked = await applyWatermark(Buffer.from(buffer), { mimeType: "image/jpeg" });
+    fs.writeFileSync(uploadPath, watermarked);
 
     return `/uploads/${fileName}`;
   } catch (err) {
@@ -109,14 +113,31 @@ export async function POST(req: Request) {
 
     const normalizedLanguage = rawLanguage === "ar" ? "ar" : "en";
 
+    // ── Company subscription path ────────────────────────────────────────────
+    // If the bot tagged this submission as belonging to an active company,
+    // the company's plan limits supersede any per-ad package limits.
+    const companyIdInput = data?.companyId ? String(data.companyId).trim() : null;
+    let companyCtx: { id: string; maxAdChars: number; maxAdImages: number } | null = null;
+    if (companyIdInput) {
+      const c = await prisma.company.findUnique({
+        where: { id: companyIdInput },
+        include: { plan: true },
+      });
+      if (c && c.plan && c.subscriptionStatus === "ACTIVE" && c.companyPhone === phone &&
+          (!c.subscriptionEndsAt || c.subscriptionEndsAt > new Date())) {
+        companyCtx = { id: c.id, maxAdChars: c.plan.maxAdChars, maxAdImages: c.plan.maxAdImages };
+      }
+    }
+
     // ── Resolve package and enforce limits ───────────────────────────────────
     const packageId = data?.packageId ? String(data.packageId).trim() : null;
     let pkg: { id: string; price: number; maxChars: number; maxImages: number; durationDays: number; isFeatured: boolean; isPinned: boolean } | null = null;
-    if (packageId) {
+    if (packageId && !companyCtx) {
       pkg = await prisma.package.findUnique({ where: { id: packageId }, select: { id: true, price: true, maxChars: true, maxImages: true, durationDays: true, isFeatured: true, isPinned: true } });
     }
-    const maxChars = pkg?.maxChars ?? 150;
-    const maxImages = pkg?.maxImages ?? 1;
+    // Company limits override per-ad package limits.
+    const maxChars = companyCtx ? companyCtx.maxAdChars : (pkg?.maxChars ?? 150);
+    const maxImages = companyCtx ? companyCtx.maxAdImages : (pkg?.maxImages ?? 1);
     if (text.length > maxChars) {
       return NextResponse.json({ error: "TEXT_TOO_LONG", message: `Max ${maxChars} chars for this plan.`, maxChars }, { status: 400 });
     }
@@ -135,7 +156,9 @@ export async function POST(req: Request) {
     const hasWebsite   = platformList.includes("website")  || rawPlatform === "both";
     const hasFacebook  = platformList.includes("facebook");
     const hasInstagram = platformList.includes("instagram");
-    const hasX         = platformList.includes("x");
+    // Free plan cannot publish on X
+    const isFreePackage2 = pkg ? pkg.price === 0 : true;
+    const hasX         = platformList.includes("x") && !isFreePackage2;
     const targetParts: string[] = [];
     if (hasWebsite)   targetParts.push("website");
     if (hasTelegram)  targetParts.push("telegram");
@@ -146,6 +169,9 @@ export async function POST(req: Request) {
 
     // ── Parse contact methods (comma-separated: "whatsapp,telegram,call") ──────
     const telegramUsername = data?.telegramUsername ? String(data.telegramUsername).trim().replace(/^@/, "") : null;
+
+    const locationValue = data?.location ? String(data.location).trim() : null;
+    const subCategoryValue = data?.subCategory ? String(data.subCategory).trim() : null;
 
     const rawContactMethod = String(data?.contactMethod ?? "").trim();
     const contactMethods   = rawContactMethod
@@ -158,8 +184,9 @@ export async function POST(req: Request) {
     // whatsappNumber must be set for the WhatsApp button to appear on the website
     const whatsappNumber = hasWhatsApp ? phone : null;
 
-    // Use flat package price instead of dynamic bot-calculated price
-    const packagePrice = pkg?.price ?? 0;
+    // Use flat package price instead of dynamic bot-calculated price.
+    // Company subscriptions are pre-paid → treat as free (no Ziina charge).
+    const packagePrice = companyCtx ? 0 : (pkg?.price ?? 0);
     const isFreePackage = packagePrice === 0;
 
     // ── Upsert user record ────────────────────────────────────────────────────
@@ -189,7 +216,11 @@ export async function POST(req: Request) {
         status:         isFreePackage ? "PUBLISHED" : "WAITING_PAYMENT",
         publishTarget,
         contactMethod,
-        packageId: packageId || undefined,
+        packageId: companyCtx ? undefined : (packageId || undefined),
+        companyId: companyCtx?.id ?? undefined,
+        source: "telegram",
+        location: locationValue,
+        subCategory: subCategoryValue,
       } as any,
     });
 
@@ -254,11 +285,25 @@ export async function POST(req: Request) {
           contactMethod,
           telegramChatId:  chatId ? String(chatId) : null,
           telegramUsername: telegramUsername || undefined,
+          location: locationValue,
+          subCategory: subCategoryValue,
           status:         "PUBLISHED",
           publishedAt:    new Date(),
           expiresAt,
         } as any,
       });
+
+      // Link uploaded images to the Ad so the website shows them. The
+      // SubmissionMedia rows above are temp/staging only — the public site
+      // queries `Media` (adId-bound). Mirrors the WhatsApp free-ad path.
+      for (let i = 0; i < savedImagePaths.length; i++) {
+        const url = savedImagePaths[i].startsWith("/")
+          ? savedImagePaths[i]
+          : `/uploads/${savedImagePaths[i]}`;
+        await prisma.media.create({ data: { adId: ad.id, url, position: i } }).catch(e =>
+          console.error("[telegram-ad] media create failed:", e?.message || e)
+        );
+      }
 
       await prisma.adSubmission.update({
         where: { id: submission.id },
@@ -267,41 +312,54 @@ export async function POST(req: Request) {
 
       const adUrl = `${PUBLIC_URL}/ad/${ad.id}`;
 
-      // Build contact lines and publish to social
+      // Build contact lines and publish to social — wait for results to return URLs
       console.log("SOCIAL TARGETS:", { hasFacebook, hasInstagram, hasX, publishTarget, rawPlatform });
+      let facebookUrl: string | null = null;
+      let instagramUrl: string | null = null;
+      let xUrl: string | null = null;
+
       if (hasFacebook || hasInstagram || hasX) {
         const socialContactLines: string[] = [];
-        if (hasCall)      socialContactLines.push(`📞 +${phone}`);
-        if (hasWhatsApp)  socialContactLines.push(`💬 wa.me/${phone}`);
-        if (contactMethods.includes("telegram")) socialContactLines.push(`✈️ Telegram`);
+        if (hasCall)      socialContactLines.push(`Call: +${phone}`);
+        if (hasWhatsApp)  socialContactLines.push(`WhatsApp: wa.me/${phone}`);
+        if (contactMethods.includes("telegram")) socialContactLines.push(`Telegram`);
 
         const allSocialImageUrls = savedImagePaths.map(p => `${PUBLIC_URL}/uploads/${p.replace(/^\/?(uploads\/)?/, "")}`);
-        // Fire-and-forget: IG carousel can take 30-120 seconds. Don't make the bot wait.
-        // We respond immediately; social IDs are saved to the ad record when the publish finishes.
-        const adIdForUpdate = ad.id;
-        publishToSocial({
-          title:        ad.title || "",
-          description:  ad.description,
-          category:     ad.category,
-          adUrl,
-          imageUrl:     allSocialImageUrls[0] ?? null,
-          allImageUrls: allSocialImageUrls,
-          adPrice:      data.adPrice ? Number(data.adPrice) : null,
-          isNegotiable: data.isNegotiable === true,
-          contactLines: socialContactLines,
-          publishFacebook:  hasFacebook,
-          publishInstagram: hasInstagram,
-          publishX: hasX,
-        }).then(async (socialResult) => {
+        try {
+          const socialResult = await publishToSocial({
+            title:        ad.title || "",
+            description:  ad.description,
+            category:     ad.category,
+            adUrl,
+            imageUrl:     allSocialImageUrls[0] ?? null,
+            allImageUrls: allSocialImageUrls,
+            adPrice:      data.adPrice ? Number(data.adPrice) : null,
+            isNegotiable: data.isNegotiable === true,
+            contactLines: socialContactLines,
+            publishFacebook:  hasFacebook,
+            publishInstagram: hasInstagram,
+            publishX: hasX,
+          });
           const socialIds: Record<string, string> = {};
-          if (socialResult.facebookPostId) socialIds.facebookPostId = socialResult.facebookPostId;
-          if (socialResult.instagramPostId) socialIds.instagramPostId = socialResult.instagramPostId;
-          if (socialResult.xPostId) socialIds.twitterPostId = socialResult.xPostId;
-          if (Object.keys(socialIds).length > 0) {
-            await prisma.ad.update({ where: { id: adIdForUpdate }, data: socialIds });
-            console.log("TELEGRAM ROUTE: social IDs saved for ad=", adIdForUpdate, socialIds);
+          if (socialResult.facebookPostId) {
+            socialIds.facebookPostId = socialResult.facebookPostId;
+            facebookUrl = socialResult.facebookUrl || `https://www.facebook.com/${process.env.FB_PAGE_ID}/posts/${socialResult.facebookPostId}`;
           }
-        }).catch(e => console.error("TELEGRAM ROUTE SOCIAL PUBLISH ERROR:", e));
+          if (socialResult.instagramPostId) {
+            socialIds.instagramPostId = socialResult.instagramPostId;
+            instagramUrl = socialResult.instagramUrl || null;
+          }
+          if (socialResult.xPostId) {
+            socialIds.twitterPostId = socialResult.xPostId;
+            xUrl = socialResult.xUrl || null;
+          }
+          if (Object.keys(socialIds).length > 0) {
+            await prisma.ad.update({ where: { id: ad.id }, data: socialIds });
+            console.log("TELEGRAM ROUTE: social IDs saved for ad=", ad.id, socialIds);
+          }
+        } catch (e) {
+          console.error("TELEGRAM ROUTE SOCIAL PUBLISH ERROR:", e);
+        }
       }
 
       // Telegram channel URL (if published there)
@@ -315,13 +373,9 @@ export async function POST(req: Request) {
         free:    true,
         adId:    ad.id,
         adUrl:           hasWebsite ? adUrl : null,
-        // Note: social URLs are resolved asynchronously — the bot shows generic
-        // platform links because carousels/posts may still be publishing.
-        // Social posts publish asynchronously — return the ad page URL as the canonical link
-        // for all platforms. The actual social post URLs are saved in the DB when they complete.
-        facebookUrl:  hasFacebook  ? adUrl : null,
-        instagramUrl: hasInstagram ? adUrl : null,
-        xUrl:         hasX         ? adUrl : null,
+        facebookUrl,
+        instagramUrl,
+        xUrl,
         telegramChannelUrl,
         telegramChatId: chatId ? String(chatId) : null,
         publishTarget,
@@ -352,7 +406,7 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("TELEGRAM ROUTE ERROR:", error);
     return NextResponse.json(
-      { success: false, error: "SERVER_ERROR", message: error?.message ?? "" },
+      { success: false, error: "SERVER_ERROR", message: "An error occurred" },
       { status: 500 }
     );
   }

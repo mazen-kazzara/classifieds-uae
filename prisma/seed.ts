@@ -33,6 +33,8 @@ async function main() {
     { name: "Pets", nameAr: "حيوانات أليفة", slug: "pets", icon: "🐾", sortOrder: 13, imageUrl: "https://images.unsplash.com/photo-1587300003388-59208cc962cb?w=800&q=80" },
     { name: "Equipment & Tools", nameAr: "معدات وأدوات", slug: "equipment-tools", icon: "🔨", sortOrder: 14, imageUrl: "https://images.unsplash.com/photo-1581783898377-1c85bf937427?w=800&q=80" },
     { name: "Others", nameAr: "أخرى", slug: "others", icon: "📦", sortOrder: 15, imageUrl: "https://images.unsplash.com/photo-1513542789411-b6a5d4f31634?w=800&q=80" },
+    { name: "Jewelry & Accessories", nameAr: "مجوهرات وإكسسوارات", slug: "jewelry-accessories", icon: "💎", sortOrder: 16, imageUrl: "https://images.unsplash.com/photo-1573408301185-9146fe634ad0?w=800&q=80" },
+    { name: "Watches", nameAr: "ساعات", slug: "watches", icon: "⌚", sortOrder: 17, imageUrl: "https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=800&q=80" },
   ];
 
   for (const cat of cats) {
@@ -47,7 +49,7 @@ async function main() {
   }
 
   const packages = [
-    { name: "Free", nameAr: "مجاني", description: "Free listing", price: 0, durationDays: 14, maxChars: 150, maxImages: 1, sortOrder: 1 },
+    { name: "Free", nameAr: "مجاني", description: "Free listing", price: 0, durationDays: 3, maxChars: 150, maxImages: 1, sortOrder: 1 },
     { name: "Basic", nameAr: "أساسي", description: "5 AED", price: 5, durationDays: 7, maxChars: 400, maxImages: 2, sortOrder: 2 },
     { name: "UAE Flag", nameAr: "علم الإمارات", description: "Free for a limited time — Launch Offer", price: 0, durationDays: 14, maxChars: 800, maxImages: 4, isFeatured: true, sortOrder: 3, promoEndDate: new Date("2026-05-01T00:00:00Z") },
     { name: "Standard", nameAr: "قياسي", description: "9 AED - Best Value", price: 9, durationDays: 14, maxChars: 800, maxImages: 4, isFeatured: true, sortOrder: 4 },
@@ -60,6 +62,22 @@ async function main() {
   for (const pkg of packages) {
     await prisma.package.upsert({ where: { name: pkg.name }, update: { ...pkg, isActive: true }, create: { ...pkg, isActive: true } });
     console.log("Package seeded:", pkg.name);
+  }
+
+  // ── Company Subscription Plans (monthly business plans) ─────────────────
+  const companyPlans = [
+    { slug: "basic-business",    name: "Basic Business",    nameAr: "أساسي للأعمال",   description: "1 activity · Unlimited ads · 400 char description · 2 images per ad",  descriptionAr: "نشاط واحد · إعلانات غير محدودة · 400 حرف · صورتان لكل إعلان",  price: 500,  maxActivities: 1, maxAdChars: 400,  maxAdImages: 2, sortOrder: 1 },
+    { slug: "standard-business", name: "Standard Business", nameAr: "قياسي للأعمال",   description: "1 activity · Unlimited ads · 800 char description · 2 images per ad",  descriptionAr: "نشاط واحد · إعلانات غير محدودة · 800 حرف · صورتان لكل إعلان",  price: 900,  maxActivities: 1, maxAdChars: 800,  maxAdImages: 2, sortOrder: 2 },
+    { slug: "premium-business",  name: "Premium Business",  nameAr: "بريميوم للأعمال", description: "1 activity · Unlimited ads · 1200 char description · 6 images per ad", descriptionAr: "نشاط واحد · إعلانات غير محدودة · 1200 حرف · 6 صور لكل إعلان",  price: 1500, maxActivities: 1, maxAdChars: 1200, maxAdImages: 6, sortOrder: 3 },
+  ];
+
+  for (const cp of companyPlans) {
+    await prisma.companyPlan.upsert({
+      where:  { slug: cp.slug },
+      update: { ...cp, isActive: true, billingCycle: "MONTHLY", currency: "AED", unlimitedAds: true },
+      create: { ...cp, isActive: true, billingCycle: "MONTHLY", currency: "AED", unlimitedAds: true },
+    });
+    console.log("Company plan seeded:", cp.name);
   }
 }
 

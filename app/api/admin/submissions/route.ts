@@ -30,5 +30,5 @@ export async function GET(req: NextRequest) {
       prisma.adSubmission.count({ where }),
     ]);
     return NextResponse.json({ ok: true, submissions, total, page, totalPages: Math.ceil(total / limit) });
-  } catch (err: unknown) { return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: err instanceof Error ? err.message : "" }, { status: 500 }); }
+  } catch (err: unknown) { return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: "An error occurred" }, { status: 500 }); }
 }

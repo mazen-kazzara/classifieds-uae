@@ -60,6 +60,6 @@ export async function POST(req: Request) {
       isFree: republishPrice === 0,
     });
   } catch (err: unknown) {
-    return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: err instanceof Error ? err.message : "" }, { status: 500 });
+    return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: "An error occurred" }, { status: 500 });
   }
 }

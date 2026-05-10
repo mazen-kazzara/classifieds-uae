@@ -1,8 +1,17 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 import { deleteFromAllChannels } from "@/lib/delete-from-channels";
 
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // Authenticate cron requests via secret
+  const secret = process.env.EXPIRE_SECRET;
+  if (secret) {
+    const provided = req.headers.get("x-cron-secret") || req.nextUrl.searchParams.get("secret");
+    if (provided !== secret) {
+      return NextResponse.json({ ok: false, error: "UNAUTHORIZED" }, { status: 401 });
+    }
+  }
   const now = new Date();
 
   /* 1. Find ads that need to expire */

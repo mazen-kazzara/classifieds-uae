@@ -14,5 +14,5 @@ export async function POST() {
     }
     const deletedRows = await prisma.submissionMedia.deleteMany({ where: { id: { in: expired.map(e => e.id) } } });
     return NextResponse.json({ ok: true, scanned: expired.length, deletedRows: deletedRows.count, deletedFiles });
-  } catch (err: unknown) { return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: err instanceof Error ? err.message : "" }, { status: 500 }); }
+  } catch (err: unknown) { return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: "An error occurred" }, { status: 500 }); }
 }

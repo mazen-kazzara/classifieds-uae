@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useSession, signOut } from "next-auth/react";
 import { useTranslations } from "@/lib/useTranslations";
 import { usePathname, useRouter } from "next/navigation";
+// InstallApp moved to layout as floating icon
 
 
 export default function Header() {
@@ -40,12 +41,12 @@ export default function Header() {
 
   return (
     <header style={{ backgroundColor: "var(--surface)", borderBottom: "1.5px solid var(--border)" }} className="sticky top-0 z-50 shadow-card">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6">
-        <div className="flex items-center justify-between gap-4 h-[60px]">
+      <div className="max-w-7xl mx-auto px-2 sm:px-6">
+        <div className="flex items-center justify-between gap-2 sm:gap-4 h-[56px] sm:h-[60px] overflow-hidden">
 
           {/* Logo */}
-          <Link href={`/${locale}`} className="flex-shrink-0 flex items-center gap-2">
-            <img src="/Classifieds_uae_jpg.jpeg" alt="Classifieds UAE" style={{width: "36px", height: "36px"}} className="rounded-lg object-contain" />
+          <Link href={`/${locale}`} className="flex-shrink-0 flex items-center gap-1.5 sm:gap-2">
+            <img src="/Classifieds_uae_jpg.jpeg" alt="Classifieds UAE" className="rounded-lg object-contain w-[28px] h-[28px] sm:w-[36px] sm:h-[36px]" />
             <span style={{ color: "var(--text)", fontFamily: "var(--font-inter), sans-serif" }} className="text-lg font-bold hidden sm:block">
               Classifieds <span style={{ color: "#EF3B24" }}>U</span><span style={{ color: "#00B857" }}>A</span><span style={{ color: "var(--text)" }}>E</span>
             </span>
@@ -75,57 +76,59 @@ export default function Header() {
           </form>
 
           {/* Right actions */}
-          <div className="flex items-center gap-2 flex-shrink-0">
-            {/* Search toggle — mobile */}
+          <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0">
+            {/* Search toggle — mobile only */}
             <button
               className="btn-ghost sm:hidden"
               onClick={() => setSearchOpen(s => !s)}
-              style={{ height: 36, width: 36, padding: 0 }}
+              style={{ height: 32, width: 32, padding: 0 }}
               aria-label="Search"
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
             </button>
 
             {/* Language toggle */}
             <button
               onClick={toggleLocale}
               className="btn-ghost"
-              style={{ height: 36, padding: "0 0.625rem", fontSize: "0.8125rem", fontWeight: 700, letterSpacing: "0.02em" }}
+              style={{ height: 32, padding: "0 0.5rem", fontSize: "0.75rem", fontWeight: 700 }}
               aria-label="Toggle language"
             >
               {locale === "en" ? "عربي" : "EN"}
             </button>
 
-            {/* Dark mode toggle */}
+            {/* Dark mode toggle — desktop only */}
             <button
               onClick={toggleTheme}
-              className="btn-ghost"
-              style={{ height: 36, width: 36, padding: 0 }}
+              className="btn-ghost hidden sm:flex"
+              style={{ height: 32, width: 32, padding: 0 }}
               aria-label="Toggle theme"
             >
               {theme === "dark"
-                ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
-                : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>}
+                ? <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+                : <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>}
             </button>
 
-            {/* Auth + Post Ad */}
+            {/* Auth — sign in / my ads */}
             {status === "authenticated" ? (
               <>
-                <Link href={`/${locale}/my-ads`} className="btn-ghost" style={{ height: 36, padding: "0 0.75rem", fontSize: "0.8125rem", fontWeight: 600, color: "var(--primary)" }}>
+                <Link href={`/${locale}/my-ads`} className="btn-ghost hidden sm:flex" style={{ height: 32, padding: "0 0.625rem", fontSize: "0.75rem", fontWeight: 600, color: "var(--primary)" }}>
                   {t("myAds")}
                 </Link>
-                <button onClick={() => signOut({ callbackUrl: `/${locale}` })} className="btn-ghost" style={{ height: 36, padding: "0 0.75rem", fontSize: "0.8125rem" }}>
+                <button onClick={() => signOut({ callbackUrl: `/${locale}` })} className="btn-ghost" style={{ height: 32, padding: "0 0.5rem", fontSize: "0.75rem" }}>
                   {t("signOut")}
                 </button>
               </>
             ) : (
-              <Link href={`/${locale}/login`} className="btn-ghost" style={{ height: 36, padding: "0 0.75rem", fontSize: "0.8125rem", fontWeight: 600 }}>
+              <Link href={`/${locale}/login`} className="btn-ghost" style={{ height: 32, padding: "0 0.5rem", fontSize: "0.75rem", fontWeight: 600 }}>
                 {t("signIn")}
               </Link>
             )}
-            <Link href={`/${locale}/new`} className="btn-primary gap-1" style={{ height: 36, padding: "0 0.875rem", fontSize: "0.8125rem" }}>
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>{t("postAd")}</span>
+
+            {/* Post Ad — always visible, compact on mobile */}
+            <Link href={`/${locale}/new`} className="btn-primary gap-0.5 sm:gap-1 flex-shrink-0" style={{ height: 30, padding: "0 0.5rem", fontSize: "0.7rem" }}>
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+              <span className="whitespace-nowrap">{t("postAd")}</span>
             </Link>
           </div>
         </div>

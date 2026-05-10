@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+import ContactDisclaimer from "@/components/ContactDisclaimer";
 import type { Metadata } from "next";
 
 const CATEGORY_IMAGES: Record<string, string> = {
@@ -67,8 +68,9 @@ export default async function AdPage({ params }: Props) {
   const showWhatsApp  = contactMethods.some((m: string) => m === "whatsapp" || m === "both") && !!whatsappUrl;
   const showCall      = contactMethods.some((m: string) => m === "call"     || m === "both") && !!ad.contactPhone;
   const tgUsername    = ((ad as any).telegramUsername || "").replace(/^@/, "");
-  const showTelegram  = contactMethods.includes("telegram") && !!tgUsername;
-  const telegramUrl   = showTelegram ? `https://t.me/${tgUsername}` : null;
+  // Telegram contact removed from website — Telegram is bot-only
+  const showTelegram  = false;
+  const telegramUrl: string | null   = null;
 
   return (
     <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }}>
@@ -174,7 +176,9 @@ export default async function AdPage({ params }: Props) {
         </div>
       </main>
       <Footer />
-      <script dangerouslySetInnerHTML={{ __html: "document.querySelectorAll('[data-track]').forEach(el=>{el.addEventListener('click',()=>{const id=el.getAttribute('data-ad-id');const t=el.getAttribute('data-track');if(!id||!t)return;fetch('/api/ads/'+id+'/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:t})}).catch(()=>{});});});" }} />
+      {/* Safety disclaimer modal — intercepts call/whatsapp/telegram/booking taps. */}
+      <ContactDisclaimer locale="en" />
+      <script dangerouslySetInnerHTML={{ __html: "document.querySelectorAll('[data-track]').forEach(el=>{el.addEventListener('click',()=>{const id=el.getAttribute('data-ad-id');const t=el.getAttribute('data-track');if(!id||!t)return;if(['call','whatsapp','telegram','booking'].includes(t))return;fetch('/api/ads/'+id+'/track',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({type:t})}).catch(()=>{});});});" }} />
     </div>
   );
 }

@@ -13,5 +13,5 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     await prisma.adSubmission.update({ where: { id }, data: { status: "REJECTED" } });
     if (submission.ad) await prisma.ad.update({ where: { id: submission.ad.id }, data: { status: "REJECTED" } });
     return NextResponse.json({ ok: true, submissionId: id, status: "REJECTED" });
-  } catch (err: unknown) { return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: err instanceof Error ? err.message : "" }, { status: 500 }); }
+  } catch (err: unknown) { return NextResponse.json({ ok: false, error: "SERVER_ERROR", message: "An error occurred" }, { status: 500 }); }
 }

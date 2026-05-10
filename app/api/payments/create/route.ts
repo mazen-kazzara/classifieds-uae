@@ -13,30 +13,32 @@ export async function POST(req: NextRequest) {
 
     const submission = await prisma.adSubmission.findUnique({
       where: { id: submissionId },
-      include: { submissionMedia: { orderBy: { position: "asc" } } },
+      include: {
+        submissionMedia: { orderBy: { position: "asc" } },
+        company: { include: { plan: true } },
+      },
     });
 
     if (!submission)
       return NextResponse.json({ error: "SUBMISSION_NOT_FOUND" }, { status: 404 });
 
-    console.log("PACKAGE DEBUG (prisma):", submission?.packageId);
-
-    // ✅ FORCE REAL DB CHECK (fixes your bug)
-    const pkgCheck: any = await prisma.$queryRawUnsafe(
-      `SELECT "packageId" FROM "AdSubmission" WHERE id = $1`,
-      submissionId
+    // Company subscription path: subscription already paid, treat as free flow.
+    const isActiveCompany = !!(
+      submission.companyId &&
+      submission.company &&
+      submission.company.subscriptionStatus === "ACTIVE" &&
+      (!submission.company.subscriptionEndsAt || submission.company.subscriptionEndsAt > new Date())
     );
 
-    const hasPaidPackage = pkgCheck?.[0]?.packageId != null;
+    const hasPaidPackage = !isActiveCompany && !!submission?.packageId;
 
-    console.log("PACKAGE DEBUG (raw):", pkgCheck?.[0]?.packageId);
-
-    const amount = submission.priceTotal || 0;
+    const amount = isActiveCompany ? 0 : (submission.priceTotal || 0);
+    console.log(`[publish] submission=${submissionId} company=${isActiveCompany ? submission.companyId : "no"} package=${submission.packageId ?? "none"} amount=${amount} source=${(submission as any).source ?? "?"}`);
 
     // =========================
-    // ENFORCE: Free plan cannot have images (except admin-unlimited)
+    // ENFORCE: Free plan cannot have images (except admin-unlimited or active company)
     const isAdminPkg = submission?.packageId === "admin-unlimited";
-    if (!hasPaidPackage && !isAdminPkg) {
+    if (!hasPaidPackage && !isAdminPkg && !isActiveCompany) {
       const mediaCount = await prisma.submissionMedia.count({ where: { submissionId } });
       if (mediaCount > 0) {
         return NextResponse.json(
@@ -46,11 +48,12 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // FREE AD (no package OR package with price 0)
+    // FREE AD (no package OR package with price 0 OR active company subscription)
     // =========================
     if (!hasPaidPackage || amount === 0) {
       const pkg = submission.packageId ? await prisma.package.findUnique({ where: { id: submission.packageId } }) : null;
-      const durationDays = pkg?.durationDays ?? 3;
+      // Companies get 30-day ad expiry by default (their subscription is monthly).
+      const durationDays = pkg?.durationDays ?? (isActiveCompany ? 30 : 3);
       const expiresAt = new Date();
       expiresAt.setDate(expiresAt.getDate() + durationDays);
 
@@ -90,15 +93,18 @@ export async function POST(req: NextRequest) {
           status: "PUBLISHED",
           publishedAt: new Date(),
           expiresAt,
+          location: (submission as any).location ?? null,
+          subCategory: (submission as any).subCategory ?? null,
         },
       });
 
-      await prisma.$executeRawUnsafe(
-        `UPDATE "Ad" SET "adPrice" = $1, "isNegotiable" = $2 WHERE id = $3`,
-        (submission as any).adPrice ?? null,
-        (submission as any).isNegotiable ?? false,
-        ad.id
-      );
+      await prisma.ad.update({
+        where: { id: ad.id },
+        data: {
+          adPrice: (submission as any).adPrice ?? null,
+          isNegotiable: (submission as any).isNegotiable ?? false,
+        },
+      });
 
       for (const m of submission.submissionMedia) {
         const url = m.tempKey.startsWith("/")
@@ -124,9 +130,10 @@ export async function POST(req: NextRequest) {
           const adUrl = `${process.env.APP_URL || "https://classifiedsuae.ae"}/ad/${ad.id}`;
           const priceVal = (submission as any).adPrice;
           const isNeg = (submission as any).isNegotiable;
+          // Captions are emoji-free per spec.
           const priceLine = priceVal
-            ? `\n💰 ${Number(priceVal).toLocaleString("en-AE")} AED${isNeg ? " · Negotiable" : ""}`
-            : isNeg ? "\n💰 Price: Negotiable" : "";
+            ? `\n${Number(priceVal).toLocaleString("en-AE")} AED${isNeg ? " · Negotiable" : ""}`
+            : isNeg ? "\nPrice: Negotiable" : "";
           const desc = (ad.description || "").slice(0, 700);
           const ellipsis = (ad.description?.length ?? 0) > 700 ? "..." : "";
           const rawWaNum = ((submission as any).whatsappNumber || "").replace(/\D/g, "");
@@ -136,13 +143,13 @@ export async function POST(req: NextRequest) {
           const hasCall = methods.includes("call") || methods.includes("both");
           const hasWA   = (methods.includes("whatsapp") || methods.includes("both")) && !!rawWaNum;
           const hasTg   = methods.includes("telegram");
-          const callLine2 = hasCall && rawPhone ? `\n📞 +${rawPhone}` : "";
-          const caption = `📢 ${ad.title}\n🗂 ${ad.category}${priceLine}${callLine2}\n\n${desc}${ellipsis}\n\n🔗 ${adUrl}`;
+          const callLine2 = hasCall && rawPhone ? `\nCall: +${rawPhone}` : "";
+          const caption = `${ad.title}\n${ad.category}${priceLine}${callLine2}\n\n${desc}${ellipsis}\n\n${adUrl}`;
           const buttons: { text: string; url: string }[] = [];
-          if (hasWA)  buttons.push({ text: "💬 WhatsApp", url: `https://wa.me/${rawWaNum}` });
+          if (hasWA)  buttons.push({ text: "WhatsApp", url: `https://wa.me/${rawWaNum}` });
           const tgUser = ((submission as any).telegramUsername || "").replace(/^@/, "");
-          if (hasTg && tgUser) buttons.push({ text: "✈️ Telegram", url: `https://t.me/${tgUser}` });
-          buttons.push({ text: "🔗 View Ad", url: adUrl });
+          if (hasTg && tgUser) buttons.push({ text: "Telegram", url: `https://t.me/${tgUser}` });
+          buttons.push({ text: "View Ad", url: adUrl });
           const replyMarkup = { inline_keyboard: [buttons] };
           const TG_APP = process.env.APP_URL || "https://classifiedsuae.ae";
           const allMedia = (submission.submissionMedia || []).map((m: any) => `${TG_APP}/uploads/${m.tempKey.replace(/^\/?(uploads\/)?/, "")}`);
@@ -168,7 +175,7 @@ export async function POST(req: NextRequest) {
               const btnRes = await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ chat_id: CHAN, text: `🔗 ${adUrl}`, reply_markup: replyMarkup }),
+                body: JSON.stringify({ chat_id: CHAN, text: adUrl, reply_markup: replyMarkup }),
               }).catch(() => null);
               const btnJson = await btnRes?.json().catch(() => null);
               if (btnJson?.result?.message_id) allMsgIds.push(btnJson.result.message_id);
@@ -214,9 +221,9 @@ export async function POST(req: NextRequest) {
         const phone2 = ((submission as any).contactPhone || submission.phone || "").replace(/\D/g, "");
         const waNum2 = ((submission as any).whatsappNumber || "").replace(/\D/g, "");
         const contactLines2: string[] = [];
-        if (methods2.includes("call") && phone2) contactLines2.push(`📞 +${phone2}`);
-        if (methods2.includes("whatsapp") && waNum2) contactLines2.push(`💬 wa.me/${waNum2}`);
-        if (methods2.includes("telegram")) contactLines2.push(`✈️ Telegram`);
+        if (methods2.includes("call") && phone2) contactLines2.push(`Call: +${phone2}`);
+        if (methods2.includes("whatsapp") && waNum2) contactLines2.push(`WhatsApp: wa.me/${waNum2}`);
+        if (methods2.includes("telegram")) contactLines2.push(`Telegram`);
         try {
           const socialResult = await publishToSocial({
             title: ad.title || "",

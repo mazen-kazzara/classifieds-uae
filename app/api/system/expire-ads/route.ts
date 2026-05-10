@@ -54,7 +54,7 @@ export async function POST() {
 
   } catch (err: any) {
     return NextResponse.json(
-      { ok: false, error: "SERVER_ERROR", message: err?.message ?? "" },
+      { ok: false, error: "SERVER_ERROR", message: "An error occurred" },
       { status: 500 }
     );
   }

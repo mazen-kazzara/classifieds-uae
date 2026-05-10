@@ -104,14 +104,14 @@ export default function MyAdsPage() {
     <div style={{ minHeight: "100vh", backgroundColor: "var(--bg)" }}>
       <Header />
       <main className="max-w-3xl mx-auto px-4 py-8">
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem" }}>
-          <div>
-            <h1 style={{ color: "var(--text)", fontWeight: 800, fontSize: "1.5rem", marginBottom: "0.25rem" }}>{t("title")}</h1>
-            <p style={{ color: "var(--text-muted)", fontSize: "0.875rem" }}>{locale === "ar" ? "مسجّل الدخول بـ" : "Logged in as"} <strong style={{ color: "var(--text)" }}>{displayName}</strong></p>
+        <div style={{ display: "flex", flexWrap: "wrap", justifyContent: "space-between", alignItems: "center", marginBottom: "1.5rem", gap: "0.75rem" }}>
+          <div style={{ minWidth: 0 }}>
+            <h1 style={{ color: "var(--text)", fontWeight: 800, fontSize: "1.25rem", marginBottom: "0.25rem" }}>{t("title")}</h1>
+            <p style={{ color: "var(--text-muted)", fontSize: "0.75rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{locale === "ar" ? "مسجّل الدخول بـ" : "Logged in as"} <strong style={{ color: "var(--text)" }}>{displayName}</strong></p>
           </div>
-          <div style={{ display: "flex", gap: "0.75rem" }}>
-            <Link href="/new" className="btn-primary" style={{ height: 40, padding: "0 1rem", fontSize: "0.875rem" }}>{locale === "ar" ? "+ نشر إعلان" : "+ Post Ad"}</Link>
-            <button onClick={() => signOut({ callbackUrl: "/" })} className="btn-secondary" style={{ height: 40, padding: "0 1rem", fontSize: "0.875rem" }}>{locale === "ar" ? "تسجيل الخروج" : "Sign Out"}</button>
+          <div style={{ display: "flex", gap: "0.5rem", flexShrink: 0 }}>
+            <Link href="/new" className="btn-primary" style={{ height: 34, padding: "0 0.75rem", fontSize: "0.75rem" }}>{locale === "ar" ? "+ نشر إعلان" : "+ Post Ad"}</Link>
+            <button onClick={() => signOut({ callbackUrl: "/" })} className="btn-secondary" style={{ height: 34, padding: "0 0.75rem", fontSize: "0.75rem" }}>{locale === "ar" ? "خروج" : "Sign Out"}</button>
           </div>
         </div>
 
@@ -132,7 +132,7 @@ export default function MyAdsPage() {
                     <div style={{ display: "flex", alignItems: "center", gap: "0.5rem", marginBottom: "0.25rem" }}>
                       {isExpired && <span style={{ fontSize: "0.65rem", fontWeight: 700, backgroundColor: "var(--text-muted)", color: "#fff", padding: "0.1rem 0.4rem", borderRadius: 999 }}>{locale === "ar" ? "منتهي" : "EXPIRED"}</span>}
                       {ad.isFeatured && !isExpired && <span style={{ fontSize: "0.65rem", fontWeight: 700, backgroundColor: "var(--primary)", color: "#fff", padding: "0.1rem 0.4rem", borderRadius: 999 }}>FEATURED</span>}
-                      <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{locale === "ar" ? (CAT_AR[ad.category.toLowerCase().replace(/ /g,"-")] || ad.category) : ad.category}</span>
+                      <span style={{ fontSize: "0.7rem", color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.04em" }}>{locale === "ar" ? (CAT_AR[ad.category.toLowerCase().replace(/ /g,"-").replace(/&/g,"").replace(/--/g,"-")] || ad.category) : ad.category}</span>
                     </div>
                     <p style={{ color: "var(--text)", fontWeight: 600, fontSize: "0.9375rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ad.title || (locale === "ar" ? "(بدون عنوان)" : "(No title)")}</p>
                     <p style={{ color: isExpired ? "var(--text-muted)" : expiring ? "var(--danger)" : "var(--text-muted)", fontSize: "0.75rem", marginTop: "0.25rem", fontWeight: expiring ? 600 : 400 }}>

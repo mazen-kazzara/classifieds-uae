@@ -147,6 +147,15 @@ export default function LoginPage() {
                 {t("notRegistered")}{" "}
                 <Link href={`/${locale}/register`} style={{ color: "var(--primary)", fontWeight: 600, textDecoration: "none" }}>{t("registerLink")}</Link>
               </p>
+
+              <div style={{ marginTop: "0.75rem", padding: "0.75rem 1rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--surface-2)", border: "1.5px solid var(--border)", textAlign: "center" }}>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.8125rem", margin: 0 }}>
+                  {locale === "ar" ? "🏢 تملك شركة؟ " : "🏢 Have a business? "}
+                  <Link href={`/${locale}/register/company`} style={{ color: "var(--primary)", fontWeight: 600, textDecoration: "none" }}>
+                    {locale === "ar" ? "سجّل شركتك" : "Register your company"}
+                  </Link>
+                </p>
+              </div>
             </>
           )}
 

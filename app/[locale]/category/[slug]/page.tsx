@@ -1,4 +1,4 @@
-export const dynamic = "force-dynamic";
+export const revalidate = 120; // ISR: revalidate every 2 minutes
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import Header from "@/components/Header";
@@ -7,6 +7,7 @@ import { notFound } from "next/navigation";
 import { getTranslations } from "@/lib/getTranslations";
 import type { Metadata } from "next";
 import { getCategories, getCatArMap, getCategoryImageMap, getCategoryImage } from "@/lib/categories";
+import { getLocationLabel, getCarBrandLabel, UAE_LOCATIONS } from "@/lib/locations-cars";
 
 interface Props { params: Promise<{ slug: string; locale: string }>; searchParams: Promise<{ page?: string; type?: string }> }
 
@@ -120,6 +121,15 @@ export default async function CategoryPage({ params, searchParams }: Props) {
           <Link href={`/${locale}/new`} className="btn-primary" style={{ height: 36, padding: "0 1rem", fontSize: "0.875rem", textDecoration: "none" }}>{locale === "ar" ? "+ نشر إعلان" : "+ Post Ad"}</Link>
         </div>
 
+        {/* Location filter pills */}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "0.375rem", marginBottom: "1.25rem" }}>
+          {UAE_LOCATIONS.map(loc => (
+            <Link key={loc.value} href={`/${locale}/category/${slug}/${loc.value}`} style={{ padding: "0.25rem 0.625rem", borderRadius: 999, fontSize: "0.7rem", fontWeight: 500, textDecoration: "none", border: "1.5px solid var(--border)", backgroundColor: "var(--surface)", color: "var(--text-muted)", transition: "all 0.15s" }}>
+              {locale === "ar" ? loc.ar : loc.en}
+            </Link>
+          ))}
+        </div>
+
         {ads.length === 0 ? (
           <div style={{ textAlign: "center", padding: "5rem 2rem", backgroundColor: "var(--surface)", borderRadius: "var(--radius-lg)", border: "2px dashed var(--border)" }}>
             <p style={{ color: "var(--text-muted)", fontSize: "1.125rem", marginBottom: "1rem" }}>{locale === "ar" ? `لا توجد إعلانات في ${CAT_AR[category.slug] || category.name}` : `No ads found in ${category.name}`}</p>
@@ -148,10 +158,35 @@ export default async function CategoryPage({ params, searchParams }: Props) {
                       {ad.contentType!=="ad" && <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${ad.contentType==="offer"?"bg-orange-100 text-orange-700":"bg-green-100 text-green-700"}`}>{ad.contentType==="offer" ? (locale==="ar"?"عرض":"Offer") : (locale==="ar"?"خدمة":"Service")}</span>}
                     </div>
                   </div>
-                  <div style={{ padding: "0.75rem" }}>
-                    <p style={{ fontWeight: 600, color: "var(--text)", fontSize: "0.875rem", overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 1 }}>{title}</p>
-                    <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.25rem", overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2 }}>{ad.description.slice(0,100)}</p>
-                    {ad.publishedAt && <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginTop: "0.5rem" }}>{new Date(ad.publishedAt).toLocaleDateString("en-AE")}</p>}
+                  <div style={{ padding: "0.75rem", display: "flex", flexDirection: "column", gap: "0.375rem" }}>
+                    <p style={{ fontWeight: 600, color: "var(--text)", fontSize: "0.875rem", overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 1, margin: 0 }}>{title}</p>
+                    {((ad as any).adPrice != null || (ad as any).isNegotiable) && (
+                      <p style={{ margin: 0, fontSize: "0.875rem", fontWeight: 700, color: "var(--primary)" }}>
+                        {(ad as any).adPrice != null && (ad as any).adPrice > 0 ? `${(ad as any).adPrice.toLocaleString("en-AE")} ${locale === "ar" ? "د.إ" : "AED"}` : ""}
+                        {(ad as any).adPrice > 0 && (ad as any).isNegotiable ? " · " : ""}
+                        {(ad as any).isNegotiable && <span style={{ fontWeight: 600, fontSize: "0.75rem" }}>{locale === "ar" ? "قابل للتفاوض" : "Negotiable"}</span>}
+                      </p>
+                    )}
+                    <p style={{ fontSize: "0.75rem", color: "var(--text-muted)", lineHeight: 1.5, overflow: "hidden", display: "-webkit-box", WebkitBoxOrient: "vertical", WebkitLineClamp: 2, margin: 0 }}>{ad.description.slice(0,100)}</p>
+                    {((ad as any).location || (ad as any).subCategory) && (
+                      <div style={{ display: "flex", flexWrap: "wrap", alignItems: "center", justifyContent: "space-between", gap: "0.25rem" }}>
+                        {(ad as any).location && (
+                          <span style={{ fontSize: "0.625rem", fontWeight: 500, padding: "0.125rem 0.375rem", borderRadius: 999, backgroundColor: "color-mix(in srgb, var(--primary) 8%, var(--surface))", color: "var(--primary)", display: "inline-flex", alignItems: "center", gap: "0.15rem" }}>
+                            <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                            {getLocationLabel((ad as any).location, locale)}
+                          </span>
+                        )}
+                        {(ad as any).subCategory && (
+                          <span style={{ fontSize: "0.625rem", fontWeight: 500, padding: "0.125rem 0.375rem", borderRadius: 999, backgroundColor: "color-mix(in srgb, var(--text-muted) 10%, var(--surface))", color: "var(--text-muted)", marginInlineStart: "auto" }}>
+                            {getCarBrandLabel((ad as any).subCategory, locale)}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", borderTop: "1px solid var(--border)", paddingTop: "0.375rem", marginTop: "0.125rem" }}>
+                      <span style={{ color: "var(--text-muted)", fontSize: "0.7rem", textTransform: "capitalize" }}>{locale === "ar" ? (CAT_AR[category.slug] || category.name) : category.name}</span>
+                      {ad.publishedAt && <span style={{ color: "var(--text-muted)", fontSize: "0.7rem" }}>{new Date(ad.publishedAt).toLocaleDateString(locale === "ar" ? "ar-AE" : "en-AE")}</span>}
+                    </div>
                   </div>
                 </Link>
               );

@@ -2,9 +2,17 @@ export const dynamic = "force-dynamic";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
 import Link from "next/link";
+import { isPastMay1 } from "@/lib/plan-config";
 import type { Metadata } from "next";
 
-export const metadata: Metadata = { title: "About Us | CLASSIFIEDS UAE", description: "Learn about CLASSIFIEDS UAE — UAE's fastest classified ads platform." };
+export const metadata: Metadata = {
+  title: "About Classifieds UAE — Free Classified Ads Platform in the Emirates",
+  description: "Classifieds UAE is the leading free classified ads platform in the United Arab Emirates. Post ads for cars, real estate, jobs, services & more across all 7 Emirates.",
+  alternates: {
+    canonical: "https://classifiedsuae.ae/en/about",
+    languages: { en: "https://classifiedsuae.ae/en/about", ar: "https://classifiedsuae.ae/ar/about", "x-default": "https://classifiedsuae.ae/en/about" },
+  },
+};
 
 export default async function AboutPage({ params }: { params: Promise<{ locale: string }> }) {
   const { locale } = await params;
@@ -52,7 +60,7 @@ export default async function AboutPage({ params }: { params: Promise<{ locale: 
                 <li>تجربة استخدام مبسطة بدون تعقيد</li>
               </ul>
 
-              <h2 style={sectionTitle}>الفئات المتاحة (15 فئة)</h2>
+              <h2 style={sectionTitle}>الفئات المتاحة (17 فئة)</h2>
               <ul style={listStyle}>
                 <li>سيارات</li>
                 <li>عقارات</li>
@@ -69,13 +77,15 @@ export default async function AboutPage({ params }: { params: Promise<{ locale: 
                 <li>حيوانات أليفة</li>
                 <li>معدات وأدوات</li>
                 <li>أخرى</li>
+                <li>مجوهرات وإكسسوارات</li>
+                <li>ساعات</li>
               </ul>
 
               <h2 style={sectionTitle}>الخطط والأسعار</h2>
               <ul style={listStyle}>
                 <li><strong>مجاني</strong> — 0 د.إ · 150 حرف · صورة واحدة · 3 أيام</li>
                 <li><strong>أساسي</strong> — 5 د.إ · 400 حرف · صورتين · 7 أيام</li>
-                <li><strong>🇦🇪 علم الإمارات</strong> — مجاني حتى 1 مايو (عرض الإطلاق) · 800 حرف · 4 صور · 14 يوماً</li>
+                {!isPastMay1() && <li><strong>🇦🇪 علم الإمارات</strong> — مجاني حتى 1 مايو (عرض الإطلاق) · 800 حرف · 4 صور · 14 يوماً</li>}
                 <li><strong>قياسي (الأفضل قيمة)</strong> — 9 د.إ · 800 حرف · 4 صور · 14 يوماً</li>
                 <li><strong>بريميوم</strong> — 15 د.إ · 1200 حرف · 6 صور · 30 يوماً</li>
               </ul>
@@ -88,12 +98,14 @@ export default async function AboutPage({ params }: { params: Promise<{ locale: 
                 <li>📷 انستقرام</li>
                 <li>📱 قناة تيليغرام</li>
                 <li>✖️ X (تويتر)</li>
+                <li>▶️ يوتيوب (متابعة فقط)</li>
                 <li>🧵 Threads (متابعة فقط)</li>
               </ul>
 
-              <h2 style={sectionTitle}>طريقتان للنشر</h2>
+              <h2 style={sectionTitle}>ثلاث طرق للنشر</h2>
               <ul style={listStyle}>
                 <li>🌐 عبر الموقع الإلكتروني</li>
+                <li>💬 عبر بوت واتساب <a href="https://wa.me/971541807675?text=start" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", fontWeight: 600 }}>WhatsApp Bot</a></li>
                 <li>🤖 عبر بوت تيليغرام <a href="https://t.me/classifiedsuae_bot" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", fontWeight: 600 }}>@classifiedsuae_bot</a></li>
               </ul>
 
@@ -101,9 +113,9 @@ export default async function AboutPage({ params }: { params: Promise<{ locale: 
               <ul style={listStyle}>
                 <li>نظام نشر مؤتمت بالكامل</li>
                 <li>إعلان واحد يُنشر على 5 منصات في نفس الوقت</li>
-                <li>إمكانية النشر عبر تيليغرام أو الموقع</li>
+                <li>إمكانية النشر عبر الموقع أو واتساب أو تيليغرام</li>
                 <li>إعادة نشر الإعلانات المنتهية بنصف السعر</li>
-                <li>تواصل مباشر مع المشترين عبر واتساب، اتصال، أو تيليغرام</li>
+                <li>تواصل مباشر مع المشترين عبر واتساب أو اتصال</li>
                 <li>دفع آمن عبر Ziina</li>
                 <li>تركيز على السرعة والنتائج</li>
               </ul>
@@ -117,12 +129,14 @@ export default async function AboutPage({ params }: { params: Promise<{ locale: 
               <div style={{ ...paragraph, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                 <span>🌐 الموقع: <a href="https://classifiedsuae.ae" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>classifiedsuae.ae</a></span>
                 <span>📧 البريد الإلكتروني: <a href="mailto:info@classifiedsuae.ae" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>info@classifiedsuae.ae</a></span>
+                <span>💬 بوت واتساب: <a href="https://wa.me/971541807675?text=start" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>WhatsApp Bot</a></span>
                 <span>🤖 بوت تيليغرام: <a href="https://t.me/classifiedsuae_bot" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>@classifiedsuae_bot</a></span>
                 <span>📱 قناة تيليغرام: <a href="https://t.me/classifiedsuaeofficial" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>@classifiedsuaeofficial</a></span>
                 <span>📘 فيسبوك: <a href="https://facebook.com/classifiedsuaeofficial" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>classifiedsuaeofficial</a></span>
                 <span>📷 انستقرام: <a href="https://instagram.com/classifiedsuaeofficial" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>@classifiedsuaeofficial</a></span>
                 <span>✖️ X (تويتر): <a href="https://x.com/clasifiedsuae" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>@clasifiedsuae</a></span>
-                <span>💬 واتساب: <a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>القناة الرسمية</a></span>
+                <span>💬 واتساب: <a href="https://classifiedsuae.ae/WhatsApp/channel/classifiedsuaeofficial" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>القناة الرسمية</a></span>
+                <span>▶️ يوتيوب: <a href="https://www.youtube.com/@classifiedsuaeofficial" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>@classifiedsuaeofficial</a></span>
                 <span>🧵 Threads: <a href="https://www.threads.com/@classifiedsuaeofficial" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>@classifiedsuaeofficial</a></span>
               </div>
 
@@ -160,7 +174,7 @@ export default async function AboutPage({ params }: { params: Promise<{ locale: 
                 <li>Simple user experience without complexity</li>
               </ul>
 
-              <h2 style={sectionTitle}>Available Categories (15 categories)</h2>
+              <h2 style={sectionTitle}>Available Categories (17 categories)</h2>
               <ul style={listStyle}>
                 <li>Cars</li>
                 <li>Real Estate</li>
@@ -177,13 +191,15 @@ export default async function AboutPage({ params }: { params: Promise<{ locale: 
                 <li>Pets</li>
                 <li>Equipment &amp; Tools</li>
                 <li>Others</li>
+                <li>Jewelry &amp; Accessories</li>
+                <li>Watches</li>
               </ul>
 
               <h2 style={sectionTitle}>Plans &amp; Pricing</h2>
               <ul style={listStyle}>
                 <li><strong>Free</strong> — 0 AED · 150 chars · 1 image · 3 days</li>
                 <li><strong>Basic</strong> — 5 AED · 400 chars · 2 images · 7 days</li>
-                <li><strong>🇦🇪 UAE Flag</strong> — FREE until May 1st (Launch Offer) · 800 chars · 4 images · 14 days</li>
+                {!isPastMay1() && <li><strong>🇦🇪 UAE Flag</strong> — FREE until May 1st (Launch Offer) · 800 chars · 4 images · 14 days</li>}
                 <li><strong>Standard (Best Value)</strong> — 9 AED · 800 chars · 4 images · 14 days</li>
                 <li><strong>Premium</strong> — 15 AED · 1200 chars · 6 images · 30 days</li>
               </ul>
@@ -196,12 +212,14 @@ export default async function AboutPage({ params }: { params: Promise<{ locale: 
                 <li>📷 Instagram</li>
                 <li>📱 Telegram channel</li>
                 <li>✖️ X (Twitter)</li>
+                <li>▶️ YouTube (follow-only)</li>
                 <li>🧵 Threads (follow-only)</li>
               </ul>
 
-              <h2 style={sectionTitle}>Two Ways to Post</h2>
+              <h2 style={sectionTitle}>Three Ways to Post</h2>
               <ul style={listStyle}>
                 <li>🌐 Via the website</li>
+                <li>💬 Via our WhatsApp bot <a href="https://wa.me/971541807675?text=start" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", fontWeight: 600 }}>WhatsApp Bot</a></li>
                 <li>🤖 Via our Telegram bot <a href="https://t.me/classifiedsuae_bot" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", fontWeight: 600 }}>@classifiedsuae_bot</a></li>
               </ul>
 
@@ -209,9 +227,9 @@ export default async function AboutPage({ params }: { params: Promise<{ locale: 
               <ul style={listStyle}>
                 <li>Fully automated publishing system</li>
                 <li>One ad published to 5 platforms at the same time</li>
-                <li>Post via website or Telegram bot</li>
+                <li>Post via website, WhatsApp bot, or Telegram bot</li>
                 <li>Republish expired ads at half price</li>
-                <li>Direct buyer contact via WhatsApp, call, or Telegram</li>
+                <li>Direct buyer contact via WhatsApp or call</li>
                 <li>Secure payments via Ziina</li>
                 <li>Focus on speed and results</li>
               </ul>
@@ -225,12 +243,14 @@ export default async function AboutPage({ params }: { params: Promise<{ locale: 
               <div style={{ ...paragraph, display: "flex", flexDirection: "column", gap: "0.5rem" }}>
                 <span>🌐 Website: <a href="https://classifiedsuae.ae" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>classifiedsuae.ae</a></span>
                 <span>📧 Email: <a href="mailto:info@classifiedsuae.ae" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>info@classifiedsuae.ae</a></span>
+                <span>💬 WhatsApp bot: <a href="https://wa.me/971541807675?text=start" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>WhatsApp Bot</a></span>
                 <span>🤖 Telegram bot: <a href="https://t.me/classifiedsuae_bot" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>@classifiedsuae_bot</a></span>
                 <span>📱 Telegram channel: <a href="https://t.me/classifiedsuaeofficial" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>@classifiedsuaeofficial</a></span>
                 <span>📘 Facebook: <a href="https://facebook.com/classifiedsuaeofficial" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>classifiedsuaeofficial</a></span>
                 <span>📷 Instagram: <a href="https://instagram.com/classifiedsuaeofficial" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>@classifiedsuaeofficial</a></span>
                 <span>✖️ X (Twitter): <a href="https://x.com/clasifiedsuae" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>@clasifiedsuae</a></span>
-                <span>💬 WhatsApp: <a href="https://whatsapp.com/channel/0029Vb6jcHdDDmFX0Pp7ej34" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>Official Channel</a></span>
+                <span>💬 WhatsApp: <a href="https://classifiedsuae.ae/WhatsApp/channel/classifiedsuaeofficial" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>Official Channel</a></span>
+                <span>▶️ YouTube: <a href="https://www.youtube.com/@classifiedsuaeofficial" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>@classifiedsuaeofficial</a></span>
                 <span>🧵 Threads: <a href="https://www.threads.com/@classifiedsuaeofficial" target="_blank" rel="noopener noreferrer" style={{ color: "var(--primary)", textDecoration: "none", fontWeight: 600 }}>@classifiedsuaeofficial</a></span>
               </div>
 

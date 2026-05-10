@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useTranslations, useLocale } from "@/lib/useTranslations";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import { trackEvent, hasMarketingConsent } from "@/lib/pixel";
 import Link from "next/link";
 import Header from "@/components/Header";
 
@@ -97,6 +98,7 @@ export default function RegisterPage() {
     const result = await signIn("phone-password", { phone: cleanPhone, password, redirect: false });
     setLoading(false);
     if (result?.error) { setError(t("failed")); return; }
+    if (hasMarketingConsent()) trackEvent("CompleteRegistration", { content_name: "phone" });
     router.push(`/${locale}/my-ads`);
   }
 
@@ -151,6 +153,7 @@ export default function RegisterPage() {
     const result = await signIn("email-password", { email: e, password, redirect: false });
     setLoading(false);
     if (result?.error) { setError(t("failed")); return; }
+    if (hasMarketingConsent()) trackEvent("CompleteRegistration", { content_name: "email" });
     router.push(`/${locale}/my-ads`);
   }
 
@@ -227,6 +230,15 @@ export default function RegisterPage() {
                 {t("alreadyRegistered")}{" "}
                 <Link href={`/${locale}/login`} style={{ color: "var(--primary)", fontWeight: 600, textDecoration: "none" }}>{t("loginLink")}</Link>
               </p>
+
+              <div style={{ marginTop: "0.75rem", padding: "0.75rem 1rem", borderRadius: "var(--radius-md)", backgroundColor: "var(--surface-2)", border: "1.5px solid var(--border)", textAlign: "center" }}>
+                <p style={{ color: "var(--text-muted)", fontSize: "0.8125rem", margin: 0 }}>
+                  {locale === "ar" ? "🏢 تملك شركة؟ " : "🏢 Have a business? "}
+                  <Link href={`/${locale}/register/company`} style={{ color: "var(--primary)", fontWeight: 600, textDecoration: "none" }}>
+                    {locale === "ar" ? "سجّل شركتك" : "Register your company"}
+                  </Link>
+                </p>
+              </div>
             </>
           )}
 

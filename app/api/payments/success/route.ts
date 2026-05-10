@@ -90,18 +90,19 @@ export async function POST(req: Request) {
         if (BOT && CHAN) {
           const priceVal = (submission as any).adPrice;
           const isNeg = (submission as any).isNegotiable;
+          // Captions are emoji-free per spec.
           const priceLine = priceVal
-            ? `\n💰 ${Number(priceVal).toLocaleString("en-AE")} AED${isNeg ? " · Negotiable" : ""}`
-            : isNeg ? "\n💰 Price: Negotiable" : "";
+            ? `\n${Number(priceVal).toLocaleString("en-AE")} AED${isNeg ? " · Negotiable" : ""}`
+            : isNeg ? "\nPrice: Negotiable" : "";
           const desc = (ad.description || "").slice(0, 700);
           const ellipsis = (ad.description?.length ?? 0) > 700 ? "..." : "";
-          const callLine = hasCall && rawPhone ? `\n📞 +${rawPhone}` : "";
-          const caption = `📢 ${ad.title}\n🗂 ${ad.category}${priceLine}${callLine}\n\n${desc}${ellipsis}\n\n🔗 ${adUrl}`;
+          const callLine = hasCall && rawPhone ? `\nCall: +${rawPhone}` : "";
+          const caption = `${ad.title}\n${ad.category}${priceLine}${callLine}\n\n${desc}${ellipsis}\n\n${adUrl}`;
 
           const buttons: { text: string; url: string }[] = [];
-          if (hasWA) buttons.push({ text: "💬 WhatsApp", url: `https://wa.me/${rawWaNum}` });
-          if (hasTg) buttons.push({ text: "✈️ Telegram", url: `https://t.me/${tgUsername}` });
-          buttons.push({ text: "🔗 View Ad", url: adUrl });
+          if (hasWA) buttons.push({ text: "WhatsApp", url: `https://wa.me/${rawWaNum}` });
+          if (hasTg) buttons.push({ text: "Telegram", url: `https://t.me/${tgUsername}` });
+          buttons.push({ text: "View Ad", url: adUrl });
           const replyMarkup = { inline_keyboard: [buttons] };
 
           // All media URLs — use sendMediaGroup if >1, sendPhoto otherwise.
@@ -128,7 +129,7 @@ export async function POST(req: Request) {
               const btnRes = await fetch(`https://api.telegram.org/bot${BOT}/sendMessage`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ chat_id: CHAN, text: `🔗 ${adUrl}`, reply_markup: replyMarkup }),
+                body: JSON.stringify({ chat_id: CHAN, text: adUrl, reply_markup: replyMarkup }),
               }).catch(() => null);
               const btnJson = await btnRes?.json().catch(() => null);
               if (btnJson?.result?.message_id) allMsgIds.push(btnJson.result.message_id);
@@ -174,9 +175,9 @@ export async function POST(req: Request) {
         );
         const imageUrl = allImageUrls[0] ?? null;
         const contactLines: string[] = [];
-        if (hasCall && rawPhone) contactLines.push(`📞 +${rawPhone}`);
-        if (hasWA) contactLines.push(`💬 wa.me/${rawWaNum}`);
-        if (hasTg) contactLines.push(`✈️ @${tgUsername}`);
+        if (hasCall && rawPhone) contactLines.push(`Call: +${rawPhone}`);
+        if (hasWA) contactLines.push(`WhatsApp: wa.me/${rawWaNum}`);
+        if (hasTg) contactLines.push(`Telegram: @${tgUsername}`);
 
         try {
           const socialResult = await publishToSocial({
@@ -208,7 +209,31 @@ export async function POST(req: Request) {
     }
 
     const pkgDays = (submission as any).package?.durationDays ?? 3;
-    return NextResponse.json({ ok: true, days: pkgDays, title: ad.title });
+    const APP_URL_FINAL = process.env.APP_URL || "https://classifiedsuae.ae";
+    const adUrlFinal = `${APP_URL_FINAL}/ad/${ad.id}`;
+    const pubTargetFinal = ((submission as any).publishTarget || "") as string;
+
+    // Build platform links from saved social IDs
+    const updatedAd = await prisma.ad.findUnique({ where: { id: ad.id }, select: { facebookPostId: true, instagramPostId: true, twitterPostId: true, telegramMessageId: true } });
+    const platformLinks: Record<string, string> = {};
+    if (pubTargetFinal.includes("website")) platformLinks.website = adUrlFinal;
+    if (pubTargetFinal.includes("telegram")) platformLinks.telegram = "https://t.me/classifiedsuaeofficial";
+    if (updatedAd?.facebookPostId) platformLinks.facebook = `https://www.facebook.com/${process.env.FB_PAGE_ID}/posts/${updatedAd.facebookPostId}`;
+    else if (pubTargetFinal.includes("facebook")) platformLinks.facebook = adUrlFinal;
+    if (updatedAd?.instagramPostId) {
+      try {
+        const igToken = process.env.FB_PAGE_ACCESS_TOKEN;
+        if (igToken) {
+          const igRes = await fetch(`https://graph.facebook.com/v25.0/${updatedAd.instagramPostId}?fields=permalink&access_token=${igToken}`);
+          const igData = await igRes.json();
+          platformLinks.instagram = igData?.permalink || `https://www.instagram.com/classifiedsuaeofficial/`;
+        }
+      } catch { platformLinks.instagram = `https://www.instagram.com/classifiedsuaeofficial/`; }
+    } else if (pubTargetFinal.includes("instagram")) platformLinks.instagram = `https://www.instagram.com/classifiedsuaeofficial/`;
+    if (updatedAd?.twitterPostId) platformLinks.x = `https://x.com/clasifiedsuae/status/${updatedAd.twitterPostId}`;
+    else if (pubTargetFinal.includes("x")) platformLinks.x = `https://x.com/clasifiedsuae`;
+
+    return NextResponse.json({ ok: true, days: pkgDays, title: ad.title, adUrl: adUrlFinal, platformLinks });
   } catch (e: any) {
     return NextResponse.json({ error: e.message }, { status: 500 });
   }
